@@ -1,0 +1,37 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Lead {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+
+  userId    BigInt
+  source    String
+  scenario  String
+  direction String
+
+  name    String
+  phone   String
+  company String?
+
+  metadata Json?
+}
+
+model CaseLog {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+
+  userId    BigInt
+  text      String
+  direction String
+  summary   String?
+  advice    String?
+  raw       Json?
+}
+
