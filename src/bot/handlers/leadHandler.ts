@@ -1,12 +1,17 @@
 import { Telegraf } from 'telegraf';
 import { CustomContext } from '../../types/context';
-import { Direction, LeadPayload } from '../../types/lead';
+import { Direction, LeadPayload, ConversationMetadata } from '../../types/lead';
 import { messages, formatLeadForManager } from '../messages';
 import { backToMenuKeyboard, leadConfirmKeyboard } from '../keyboards/lead';
 import { processLead } from '../../services/leadProcessor';
 import { runtimeConfig } from '../../config/runtimeConfig';
 import { logger } from '../../utils/logger';
-import { CaseInsight, initialSessionState } from '../../types/session';
+import {
+  initialSessionState,
+  resetFlow,
+  SolutionState,
+  SubsidySolutionState
+} from '../../types/session';
 import { isValidContact } from '../../services/validation';
 import { calculateLeadScoreDetails } from '../../services/leadScoring';
 import { withCallbackGuard } from '../../utils/callbackGuard';
@@ -23,15 +28,16 @@ export const registerLeadHandlers = (bot: Telegraf<CustomContext>) => {
     'srvt:lead:restart:form',
     withCallbackGuard(async (ctx) => {
       await ctx.reply('Запускаю форму заново 👇');
-    const current = ctx.session.leadForm;
-    if (!current) {
-      return;
-    }
-    await startLeadForm(ctx, {
-      scenario: current.scenario,
-      direction: current.direction,
-      metadata: current.metadata
-    });
+      const current = ctx.session.leadForm;
+      if (!current) {
+        return;
+      }
+      await startLeadForm(ctx, {
+        scenario: current.scenario,
+        direction: current.direction,
+        metadata: current.metadata,
+        introMessage: current.introMessage
+      });
     })
   );
 
@@ -66,9 +72,17 @@ export const startLeadForm = async (
     return;
   }
 
+  const solutionState = ctx.session.solution;
+  const subsidyState = ctx.session.subsidy;
   const normalizedMetadata = normalizeMetadata(metadata);
+  const solutionMetadata = buildSolutionMetadata(solutionState);
+  const subsidyMetadata = buildSubsidyMetadata(subsidyState);
+  const combinedMetadata = mergeMetadata(
+    mergeMetadata(normalizedMetadata, solutionMetadata),
+    subsidyMetadata
+  );
+  resetFlow(ctx.session, 'lead_form');
 
-  ctx.session.flow = 'lead_form';
   ctx.session.leadForm = {
     scenario,
     direction,
@@ -79,15 +93,30 @@ export const startLeadForm = async (
       direction,
       userId
     },
-    metadata: normalizedMetadata
+    metadata: combinedMetadata,
+    introMessage: introMessage ?? selectLeadIntro(scenario, combinedMetadata),
+    contactAsked: false
   };
+
+  if (scenario === 'manager_contact') {
+    const leadState = ctx.session.leadForm;
+    leadState.step = 'phone';
+    if (!leadState.lead.name) {
+      const fallbackName = ctx.from?.first_name || ctx.from?.last_name;
+      if (fallbackName) {
+        leadState.lead.name = fallbackName;
+      }
+    }
+    await ctx.reply(messages.managerContact);
+    return;
+  }
 
   const defaultName = ctx.from?.first_name || ctx.from?.last_name;
   if (defaultName) {
     ctx.session.leadForm.lead.name = defaultName;
     ctx.session.leadForm.step = 'phone';
     await ctx.replyWithMarkdown(messages.leadFormNamePrefilled(defaultName));
-    await ctx.reply(messages.leadFormContact);
+    await askForContact(ctx);
     return;
   }
 
@@ -109,7 +138,7 @@ export const handleLeadText = async (ctx: CustomContext): Promise<boolean> => {
     case 'name':
       leadState.lead.name = text;
       leadState.step = 'phone';
-      await ctx.reply(messages.leadFormContact);
+      await askForContact(ctx);
       return true;
     case 'phone':
       if (!isValidContact(text)) {
@@ -182,40 +211,36 @@ const resolveLeadOptions = (
   if (slug === 'manager') {
     return {
       scenario: 'manager_contact',
-      direction: 'other',
-      introMessage: messages.managerContact
+      direction: 'other'
     };
   }
 
-  if (slug === 'subsidy') {
-    if (!ctx.session.lastSubsidyRecommendation) {
+  if (slug === 'subsidy_application' || slug === 'subsidy_ai') {
+    const subsidyState = ctx.session.subsidy;
+    if (!subsidyState) {
       return null;
     }
     return {
       scenario: 'subsidy_application',
-      direction: 'finance',
-      metadata: ctx.session.lastSubsidyRecommendation
+      direction: 'finance'
     };
   }
 
-  if (slug === 'quiz') {
-    if (!ctx.session.lastQuiz) {
-      return null;
-    }
+  if (slug === 'solution') {
+    const solution = ctx.session.solution;
     return {
-      scenario: 'quiz_help',
-      direction: ctx.session.lastQuiz.direction,
-      metadata: ctx.session.lastQuiz
+      scenario: 'solution_case',
+      direction: solution?.direction ?? 'other'
     };
   }
 
-  if (slug === 'case') {
+  if (slug === 'solution_case') {
     const insight = ctx.session.lastCase;
     if (!insight) {
       return null;
     }
     return {
-      scenario: 'case_review',
+      scenario: 'solution_case',
       direction: insight.direction,
       metadata: insight
     };
@@ -246,5 +271,139 @@ const normalizeMetadata = (
     return { ...(metadata as Record<string, unknown>) };
   }
   return { value: metadata };
+};
+
+const mergeMetadata = (
+  base?: Record<string, unknown>,
+  extra?: Record<string, unknown>
+): Record<string, unknown> | undefined => {
+  if (!base && !extra) {
+    return undefined;
+  }
+  return {
+    ...(base ?? {}),
+    ...(extra ?? {})
+  };
+};
+
+const buildSolutionMetadata = (
+  solution?: SolutionState
+): Record<string, unknown> | undefined => {
+  if (!solution) {
+    return undefined;
+  }
+
+  const metadata: ConversationMetadata & Record<string, unknown> = {};
+  if (solution.dialog?.length) {
+    metadata.solutionDialog = solution.dialog;
+  }
+  if (solution.managerSummary) {
+    metadata.solutionManagerSummary = solution.managerSummary;
+  }
+
+  return Object.keys(metadata).length ? metadata : undefined;
+};
+
+const buildSubsidyMetadata = (
+  subsidy?: SubsidySolutionState
+): Record<string, unknown> | undefined => {
+  if (!subsidy) {
+    return undefined;
+  }
+
+  const dialogExcerpt =
+    subsidy.dialog?.length && subsidy.dialog.length > 15
+      ? subsidy.dialog.slice(-15)
+      : subsidy.dialog;
+
+  const payload: Record<string, unknown> = {
+    subsidy: {
+      classification: subsidy.classification,
+      dialog: dialogExcerpt,
+      programs: subsidy.programs,
+      hasAmountEstimate: subsidy.hasAmountEstimate ?? false
+    }
+  };
+
+  if (subsidy.classification) {
+    payload.subsidyClassification = subsidy.classification;
+    payload.budgetFrom = subsidy.classification.budgetFrom;
+    payload.budgetTo = subsidy.classification.budgetTo;
+    payload.region = subsidy.classification.region;
+    payload.costTypes = subsidy.classification.costTypes;
+    payload.sectors = subsidy.classification.sectors;
+    payload.export = subsidy.classification.export;
+  }
+
+  if (subsidy.programs?.length) {
+    payload.subsidyPrograms = subsidy.programs;
+  }
+
+  if (typeof subsidy.hasAmountEstimate === 'boolean') {
+    payload.hasAmountEstimate = subsidy.hasAmountEstimate;
+  }
+
+  if (dialogExcerpt?.length) {
+    payload.subsidyDialog = dialogExcerpt;
+  }
+
+  return payload;
+};
+
+const askForContact = async (ctx: CustomContext): Promise<void> => {
+  const leadState = ctx.session.leadForm;
+  if (!leadState || leadState.contactAsked) {
+    return;
+  }
+
+  leadState.contactAsked = true;
+  await ctx.reply(messages.leadFormContact);
+};
+
+const selectLeadIntro = (
+  scenario: string,
+  metadata?: Record<string, unknown>
+): string | undefined => {
+  const score = extractScoreFromMetadata(metadata);
+  if (typeof score === 'number') {
+    if (score >= 4) {
+      return messages.leadFormIntroHot;
+    }
+    if (score >= 2) {
+      return messages.leadFormIntroWarm;
+    }
+    return messages.leadFormIntroCold;
+  }
+
+  if (scenario === 'manager_contact') {
+    return messages.managerContact;
+  }
+  if (scenario === 'solution_case') {
+    return messages.leadFormIntroWarm;
+  }
+  if (scenario === 'subsidy_application' || scenario === 'subsidy_ai') {
+    return messages.leadFormIntroHot;
+  }
+  if (scenario.startsWith('service_')) {
+    return messages.leadFormIntroWarm;
+  }
+
+  return undefined;
+};
+
+const extractScoreFromMetadata = (
+  metadata?: Record<string, unknown>
+): number | undefined => {
+  if (!metadata) {
+    return undefined;
+  }
+  const scoring = (metadata as Record<string, unknown>)['scoring'];
+  if (scoring && typeof scoring === 'object' && !Array.isArray(scoring)) {
+    const extendedScore = (scoring as Record<string, unknown>)['extendedScore'];
+    if (typeof extendedScore === 'number') {
+      return extendedScore;
+    }
+  }
+  return undefined;
 };
 

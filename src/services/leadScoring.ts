@@ -1,5 +1,5 @@
 import { Direction } from '../types/lead';
-import { SubsidyInput } from '../types/subsidy';
+import { SubsidyClassification } from '../types/subsidy';
 
 export interface ExtendedLeadContext {
   scenario: string;
@@ -51,6 +51,12 @@ const baseScenarioScore = (scenario: string, metadata: Record<string, unknown>):
   if (scenario === 'subsidy_application') {
     return inferSubsidyScore(metadata);
   }
+  if (scenario === 'subsidy_ai') {
+    return Math.max(3, inferSubsidyScore(metadata));
+  }
+  if (scenario === 'solution_case') {
+    return 3;
+  }
   if (scenario === 'case_review') {
     return 2;
   }
@@ -75,8 +81,19 @@ const inferQuizScore = (metadata: Record<string, unknown>): number => {
 };
 
 const inferSubsidyScore = (metadata: Record<string, unknown>): number => {
-  const input = metadata.input as SubsidyInput | undefined;
-  if (input && typeof input.spend === 'number' && input.spend >= 3_000_000) {
+  const classification = metadata.subsidyClassification as SubsidyClassification | undefined;
+  const budgets = [
+    typeof metadata.budget === 'number' ? metadata.budget : undefined,
+    typeof metadata.spend === 'number' ? metadata.spend : undefined,
+    classification?.budgetTo ?? undefined,
+    classification?.budgetFrom ?? undefined
+  ]
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+    .map((value) => Math.round(value));
+
+  const maxBudget = budgets.length ? Math.max(...budgets) : 0;
+
+  if (maxBudget >= 3_000_000) {
     return 3;
   }
   return 2;
@@ -117,24 +134,30 @@ const extractBonusFactors = (
 };
 
 const extractSpend = (metadata: Record<string, unknown>): number => {
-  const input = metadata.input as SubsidyInput | undefined;
-  if (input && typeof input.spend === 'number') {
-    return input.spend;
-  }
-  const spendValue = metadata.spend;
-  if (typeof spendValue === 'number') {
-    return spendValue;
+  const classification = metadata.subsidyClassification as SubsidyClassification | undefined;
+  const candidates = [
+    metadata.budget,
+    metadata.spend,
+    classification?.budgetTo,
+    classification?.budgetFrom
+  ].filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+
+  if (candidates.length) {
+    return Math.max(...candidates);
   }
   return 0;
 };
 
 const extractHasExport = (metadata: Record<string, unknown>): boolean => {
-  const input = metadata.input as SubsidyInput | undefined;
-  if (input && typeof input.hasExport === 'boolean') {
-    return input.hasExport;
+  const classification = metadata.subsidyClassification as SubsidyClassification | undefined;
+  const hasExportField = metadata.hasExport;
+  if (typeof hasExportField === 'boolean') {
+    return hasExportField;
   }
-  const hasExport = metadata.hasExport;
-  return typeof hasExport === 'boolean' ? hasExport : false;
+  if (classification && typeof classification.export === 'boolean') {
+    return classification.export;
+  }
+  return false;
 };
 
 const containsOpportunityRegion = (metadata: Record<string, unknown>): boolean => {

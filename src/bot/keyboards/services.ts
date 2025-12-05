@@ -1,51 +1,48 @@
 import { Markup } from 'telegraf';
 import { Direction } from '../../types/lead';
-
-const serviceOrder: Direction[] = [
-  'finance',
-  'logistics',
-  'payments',
-  'analytics',
-  'other'
-];
+import { ServiceCategory } from '../../types/service';
+import { SERVICE_MENU_ITEMS, SERVICE_PLAYBOOK } from '../../config/servicePlaybook';
 
 export const servicesMenuKeyboard = () =>
   Markup.inlineKeyboard([
-    ...serviceOrder.map((direction) => [
-      Markup.button.callback(
-        serviceButtonLabel(direction),
-        `srvt:services:view:${direction}`
-      )
+    [Markup.button.callback('💰 Подбор субсидий с ИИ', 'srvt:subsidy:start:ai')],
+    ...SERVICE_MENU_ITEMS.map(({ category, label }) => [
+      Markup.button.callback(label, `srvt:services:view:${category}`)
     ]),
-    [Markup.button.callback('Назад', 'srvt:menu:open:root')]
+    [Markup.button.callback('⬅️ В главное меню', 'srvt:menu:open:root')]
   ]);
 
-const serviceButtonLabel = (direction: Direction): string => {
-  switch (direction) {
-    case 'finance':
-      return 'Финансирование';
-    case 'logistics':
-      return 'Логистика';
-    case 'payments':
-      return 'Платежи';
-    case 'analytics':
-      return 'Проверка партнера';
-    case 'other':
-    default:
-      return 'Выход на внешние рынки';
-  }
-};
+export const financeServiceKeyboard = () =>
+  Markup.inlineKeyboard([
+    [Markup.button.callback('💰 Подбор субсидий с ИИ', 'srvt:subsidy:start:ai')],
+    [Markup.button.callback('✍️ Оставить заявку', 'srvt:services:lead:finance')],
+    [Markup.button.callback('⬅️ Назад к услугам', 'srvt:services:open:root')]
+  ]);
 
 export const serviceCtaKeyboard = (direction: Direction) =>
   Markup.inlineKeyboard([
     [
-      Markup.button.callback(
-        'Оставить заявку',
-        `srvt:services:lead:${direction}`
-      )
+      Markup.button.callback('✍️ Оставить заявку', `srvt:services:lead:${direction}`)
     ],
-    [Markup.button.callback('Назад к услугам', 'srvt:services:open:root')]
+    [Markup.button.callback('⬅️ Назад к услугам', 'srvt:services:open:root')]
   ]);
+
+const categoryLeadKey = (category: ServiceCategory): string => category;
+
+export const serviceDialogKeyboard = (
+  category: ServiceCategory,
+  _variant: 'clarify' | 'cta'
+) => {
+  const buttons = [];
+  buttons.push([
+    Markup.button.callback(
+      '📩 Отправить данные эксперту',
+      `srvt:services:lead:${categoryLeadKey(category)}`
+    )
+  ]);
+  buttons.push([Markup.button.callback('↩️ Вернуться назад', 'srvt:menu:open:root')]);
+  return Markup.inlineKeyboard(buttons);
+};
 
 
 

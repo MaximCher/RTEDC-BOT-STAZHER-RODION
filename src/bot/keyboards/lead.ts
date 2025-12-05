@@ -8,7 +8,7 @@ export const leadConfirmKeyboard = () =>
 
 export const backToMenuKeyboard = () =>
   Markup.inlineKeyboard([
-    [Markup.button.callback('Вернуться в меню', 'srvt:menu:open:root')]
+    [Markup.button.callback('⬅️ В меню', 'srvt:menu:open:root')]
   ]);
 
 

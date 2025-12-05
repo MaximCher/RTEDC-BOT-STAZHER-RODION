@@ -1,18 +1,29 @@
 import { LeadPayload, Direction } from './lead';
-import { SubsidyInput, SubsidyResult } from './subsidy';
+import { SubsidyClassification, EstimatedProgram } from './subsidy';
+import { ServiceCategory } from './service';
 
 export type FlowName =
   | 'idle'
-  | 'quiz'
+  | 'solution'
   | 'lead_form'
-  | 'case_review'
-  | 'subsidy'
-  | 'manager_contact';
+  | 'subsidy_solution'
+  | 'manager_contact'
+  | 'service_consultation';
 
-export interface QuizState {
+export type SolutionDialogTurnRole = 'user' | 'assistant';
+
+export interface SolutionDialogTurn {
+  role: SolutionDialogTurnRole;
+  text: string;
+  ts?: string;
+}
+
+export interface SolutionState {
+  dialog: SolutionDialogTurn[];
   direction?: Direction;
-  stage: 'primary' | 'followup' | 'done';
-  answers: Record<string, string>;
+  managerSummary?: string;
+  aiReady?: boolean;
+  turnCount: number;
 }
 
 export type LeadFormStep = 'name' | 'phone' | 'company' | 'confirm';
@@ -23,11 +34,34 @@ export interface LeadFormState {
   step: LeadFormStep;
   lead: Partial<LeadPayload> & Pick<LeadPayload, 'source' | 'scenario' | 'direction' | 'userId'>;
   metadata?: Record<string, unknown>;
+  introMessage?: string;
+  contactAsked?: boolean;
 }
 
-export interface CaseReviewState {
-  rawText?: string;
-  classification?: Direction;
+export interface SubsidySolutionState {
+  dialog: SolutionDialogTurn[];
+  classification?: SubsidyClassification;
+  aiReady?: boolean;
+  clarifyCount?: number;
+  needMore?: boolean;
+  turnCount: number;
+  programs?: EstimatedProgram[];
+  hasAmountEstimate?: boolean;
+  history: SubsidyStepSnapshot[];
+}
+
+export interface SubsidyStepSnapshot {
+  classification: SubsidyClassification;
+  dialogLength: number;
+  clarifyCount: number;
+}
+
+export interface ServiceDialogState {
+  category: ServiceCategory;
+  dialog: SolutionDialogTurn[];
+  turnCount: number;
+  aiReady?: boolean;
+  completed?: boolean;
 }
 
 export interface CaseInsight {
@@ -36,43 +70,28 @@ export interface CaseInsight {
   summary: string;
   advice: string;
   sources?: string[];
-}
-
-export interface QuizInsight {
-  direction: Direction;
-  summary: string;
-  answers: Record<string, string>;
-}
-
-export type SubsidyFormStep =
-  | 'entity'
-  | 'export'
-  | 'cost'
-  | 'amount'
-  | 'region'
-  | 'result';
-
-export interface SubsidyFormState {
-  step: SubsidyFormStep;
-  draft: Partial<SubsidyInput> & { spendRangeLabel?: string };
+  kbUsed?: boolean;
+  riskLevel?: string;
+  potentialValue?: string;
 }
 
 export interface SessionData {
   flow: FlowName;
-  quiz?: QuizState;
   leadForm?: LeadFormState;
-  caseReview?: CaseReviewState;
-  subsidy?: SubsidyFormState;
-  lastSubsidyRecommendation?: {
-    input: SubsidyInput;
-    results: SubsidyResult[];
-    spendRangeLabel?: string;
-    summary?: string;
-  };
+  solution?: SolutionState;
+  subsidy?: SubsidySolutionState;
+  serviceDialog?: ServiceDialogState;
   lastCase?: CaseInsight;
-  lastQuiz?: QuizInsight;
 }
 
 export const initialSessionState = (): SessionData => ({
   flow: 'idle'
 });
+
+export const resetFlow = (session: SessionData, nextFlow: FlowName = 'idle'): void => {
+  session.leadForm = undefined;
+  session.solution = undefined;
+  session.subsidy = undefined;
+  session.serviceDialog = undefined;
+  session.flow = nextFlow;
+};
