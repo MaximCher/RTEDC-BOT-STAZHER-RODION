@@ -98,8 +98,13 @@ export const startLeadForm = async (
     contactAsked: false
   };
 
+  const leadState = ctx.session.leadForm;
+
+  if (leadState.introMessage) {
+    await ctx.replyWithMarkdown(leadState.introMessage);
+  }
+
   if (scenario === 'manager_contact') {
-    const leadState = ctx.session.leadForm;
     leadState.step = 'phone';
     if (!leadState.lead.name) {
       const fallbackName = ctx.from?.first_name || ctx.from?.last_name;
@@ -107,7 +112,7 @@ export const startLeadForm = async (
         leadState.lead.name = fallbackName;
       }
     }
-    await ctx.reply(messages.managerContact);
+    await askForContact(ctx);
     return;
   }
 
@@ -212,6 +217,33 @@ const resolveLeadOptions = (
     return {
       scenario: 'manager_contact',
       direction: 'other'
+    };
+  }
+
+  if (slug === 'club') {
+    return {
+      scenario: 'club_application',
+      direction: 'other',
+      metadata: {
+        service: 'club_application',
+        source: 'main_menu',
+        description: 'Вступление в клуб экспортёров и импортёров СРВТ.РФ'
+      },
+      introMessage: messages.clubApplicationIntro
+    };
+  }
+
+  if (slug === 'academy') {
+    return {
+      scenario: 'academy_application',
+      direction: 'other',
+      metadata: {
+        service: 'academy_application',
+        source: 'main_menu',
+        description: 'Запись в Академию СРВТ.РФ',
+        landingUrl: 'https://www.xn--b1a1acg.xn--p1ai/academy'
+      },
+      introMessage: messages.academyApplicationIntro
     };
   }
 
@@ -377,6 +409,12 @@ const selectLeadIntro = (
 
   if (scenario === 'manager_contact') {
     return messages.managerContact;
+  }
+  if (scenario === 'club_application') {
+    return messages.clubApplicationIntro;
+  }
+  if (scenario === 'academy_application') {
+    return messages.academyApplicationIntro;
   }
   if (scenario === 'solution_case') {
     return messages.leadFormIntroWarm;

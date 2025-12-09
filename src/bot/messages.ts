@@ -6,6 +6,7 @@ import {
   SubsidyRegion,
   SubsidySector
 } from '../types/subsidy';
+import { escapeMarkdown } from '../utils/text';
 
 const directionLabels: Record<Direction, string> = {
   finance: 'Финансирование',
@@ -80,24 +81,15 @@ export const messages = {
   },
   quizCta: 'Оставить контакт',
   servicesIntro:
-    '📋 Услуги СРВТ: выберите задачу — и я сразу подскажу, как можем помочь и подключу эксперта.',
-  serviceDescription: (direction: Direction): string => {
-    const descriptions: Record<Direction, string> = {
-      finance:
-        '💰 Финансирование, субсидии и меры поддержки. Подберём программы, подготовим документы и доведём до выплаты.',
-      logistics:
-        '🚚 Логистика и ВЭД. Просчитаем маршруты, оптимизируем склады и поможем пройти таможню без задержек.',
-      payments:
-        '💳 Платежи и валютный контроль. Настроим расчёты, договоримся с банками, снимем ограничения и блокировки.',
-      analytics:
-        '🔍 Проверка контрагентов и аналитика. Due diligence, мониторинг рисков и поиск партнёров на целевых рынках.',
-      other:
-        '🌍 Выход на зарубежные рынки. Поможем адаптировать продукт, найти каналы сбыта и запустить продажи.'
-    };
-    return descriptions[direction];
-  },
-  serviceCta:
-    '✍️ Оставьте заявку — подключим профильного эксперта и доведём задачу до результата.',
+    '📋 Услуги СРВТ. Выберите нужное направление — расскажу, как подключим экспертов и быстро доведём задачу до результата.',
+  serviceScenarioInitialPrompt:
+    'Расскажите свободным текстом: чем занимаетесь, какой объём или сумму нужно закрыть и к каким срокам. После первого ответа уточню один нюанс и предложу шаги.',
+  serviceScenarioClarifyIntro:
+    'Спасибо, картина понятна. Чтобы предложить точный формат, ответьте ещё на один вопрос:',
+  serviceScenarioReady:
+    'Отлично, вводных хватит. Нажмите «📝 Отправить данные эксперту», и команда СРВТ подготовит решение и вернётся с предложением.',
+  serviceScenarioReadyReminder:
+    'Если готовы передать кейс, просто нажмите «📝 Отправить данные эксперту» — остальное возьмём на себя.',
   solutionIntroText:
     '🧭 Подберём решение под вашу задачу. Опишите свободным текстом: что за бизнес, какие вопросы, суммы и сроки. После каждого ответа я задам уточняющий вопрос или предложу шаги.',
   solutionFallback:
@@ -168,6 +160,10 @@ export const messages = {
     'Готово! Передал информацию эксперту СРВТ. Он свяжется в ближайшее рабочее время и пришлёт план действий.',
   managerContact:
     '🔥 Отличный выбор! Эксперт СРВТ возьмёт ваш кейс и предложит конкретный план. Оставьте удобный способ связи: телефон, @username или почту — напишем в ближайшее рабочее время.',
+  clubApplicationIntro:
+    '🤝 *Клуб экспортёров и импортёров СРВТ.РФ*\n\nЗакрытое сообщество действующих ВЭД-команд: доступ к проверенным поставщикам и покупателям, совместные закупки, разблокированные маршруты логистики, ежемесячные сессии с экспертами и быстрый обмен новыми схемами. Оставьте контакт — менеджер свяжется в течение 15 минут, расскажет условия и проверит, как ваш бизнес впишется в клуб.',
+  academyApplicationIntro:
+    '🎓 *Академия СРВТ.РФ*\n\nПрактические программы по выходу на экспорт, международной логистике, платежам и получению мер поддержки. Кураторы из СРВТ помогают собирать документы, адаптировать маркетинг под зарубеж и сопровождают до результата. Подайте заявку — перезвоним в течение 15 минут, подберём курс и подключим наставника под ваши цели.',
   subsidyIntroText:
     '💰 Проверим, можете ли вы получить субсидию.\n\nРасскажите коротко:\n— чем занимается компания и какие расходы хотите компенсировать;\n— примерный бюджет в рублях;\n— где зарегистрированы или ведёте деятельность.\n\nЧем точнее вводные, тем точнее расчёт.',
   subsidyAiHoldHint: 'Жду ваш ответ текстом ниже 👇',
@@ -210,16 +206,32 @@ const scenarioLabels: Record<string, string> = {
   solution_case: 'Подбор решения',
   quiz_help: 'Квиз: Получить помощь',
   subsidy_application: 'Калькулятор субсидий',
-  manager_contact: 'Связаться с экспертом'
+  manager_contact: 'Связаться с экспертом',
+  club_application: 'Клуб экспортёров и импортёров',
+  academy_application: 'Академия СРВТ.РФ',
+  service_international_transactions: 'Услуги: Международные транзакции',
+  service_loans: 'Услуги: Льготные кредиты',
+  service_logistics: 'Услуги: Международная логистика',
+  service_negotiations: 'Услуги: Сопровождение переговоров',
+  service_translations: 'Услуги: Лингвистические переводы',
+  service_analytics: 'Услуги: Аналитика ВЭД и проверка контрагентов'
 };
 
 export const formatLeadForManager = (lead: LeadPayload): string => {
-  const scenarioLabel = getScenarioLabel(lead.scenario);
-  const directionLabel = getDirectionLabel(lead.direction);
-  const scoreLine = typeof lead.score === 'number' ? `${lead.score}/5` : '—';
-  const priorityLine = formatPriority(lead.score);
+  const scenarioLabel = escapeMarkdown(getScenarioLabel(lead.scenario));
+  const directionLabel = escapeMarkdown(getDirectionLabel(lead.direction));
+  const scoreLine = escapeMarkdown(typeof lead.score === 'number' ? `${lead.score}/5` : '—');
+  const priorityLine = escapeMarkdown(formatPriority(lead.score));
+  const safeName = sanitizeText(lead.name) ?? escapeMarkdown('не указано');
+  const safePhone = sanitizeText(lead.phone) ?? escapeMarkdown('не указан');
+  const safeCompany = sanitizeText(lead.company) ?? escapeMarkdown('не указана');
+  const safeUserId = escapeMarkdown(
+    lead.userId !== undefined && lead.userId !== null ? String(lead.userId) : 'не указан'
+  );
   const contextLines = buildContextLines(lead.metadata);
+  const serviceBlocks = buildServiceBlocks(lead.metadata);
   const solutionBlocks = buildSolutionBlocks(lead.metadata);
+  const subsidyBlocks = buildSubsidyBlocks(lead.metadata);
 
   return [
     '*[Новый лид из SRVT Assistant]*',
@@ -230,15 +242,16 @@ export const formatLeadForManager = (lead: LeadPayload): string => {
     `*Приоритет:* ${priorityLine}`,
     '',
     '*Клиент:*',
-    `— Имя: ${lead.name}`,
-    `— Контакт: ${lead.phone}`,
-    `— Компания: ${lead.company ?? 'не указана'}`,
-    `— Telegram ID: ${lead.userId}`,
+    `— Имя: ${safeName}`,
+    `— Контакт: ${safePhone}`,
+    `— Компания: ${safeCompany}`,
+    `— Telegram ID: ${safeUserId}`,
     '',
     '*Контекст:*',
     contextLines.length ? contextLines.join('\n') : '— Нет дополнительных данных',
+    ...serviceBlocks,
     ...solutionBlocks,
-    ...buildSubsidyBlocks(lead.metadata)
+    ...subsidyBlocks
   ].join('\n');
 };
 
@@ -334,106 +347,109 @@ const squeezeToTelegramLimit = (lines: string[]): string => {
   return `${text.slice(0, TELEGRAM_MESSAGE_LIMIT - 1)}…`;
 };
 
-export const getScenarioLabel = (scenario: string): string => {
-  if (scenarioLabels[scenario]) {
-    return scenarioLabels[scenario];
-  }
+export const getScenarioLabel = (scenario: string): string =>
+  scenarioLabels[scenario] ?? `Сценарий: ${scenario}`;
 
-  if (scenario.startsWith('service_')) {
-    const [, directionKey] = scenario.split('_');
-    if (directionKey && isDirection(directionKey)) {
-      return `Услуги: ${directionLabels[directionKey]}`;
-    }
-    return 'Услуги СРВТ';
-  }
-
-  return `Сценарий: ${scenario}`;
-};
-
-const buildContextLines = (
-  metadata?: Record<string, unknown>
-): string[] => {
+const buildContextLines = (metadata?: Record<string, unknown>): string[] => {
   if (!metadata) {
     return [];
   }
 
   const lines: string[] = [];
-  const summary = metadata.summary;
-  if (typeof summary === 'string' && summary.trim()) {
-    lines.push(`— ${summary.trim()}`);
+
+  const summaryText = sanitizeText(metadata.summary);
+  if (summaryText) {
+    lines.push(`— ${summaryText}`);
   }
 
-  const advice = metadata.advice;
-  if (typeof advice === 'string' && advice.trim()) {
-    lines.push(`— Рекомендации: ${advice.trim()}`);
+  const adviceText = sanitizeText(metadata.advice);
+  if (adviceText) {
+    lines.push(`— Рекомендации: ${adviceText}`);
   }
 
-  const service = metadata.service;
-  if (typeof service === 'string' && service.trim()) {
-    lines.push(`— Услуга: ${service.trim()}`);
+  const serviceText = sanitizeText(metadata.service);
+  if (serviceText) {
+    lines.push(`— Услуга: ${serviceText}`);
   }
 
-  const sources = metadata.sources;
-  if (Array.isArray(sources) && sources.length) {
-    lines.push(`— Источники базы СРВТ: ${sources.join(', ')}`);
+  const sources = Array.isArray(metadata.sources) ? metadata.sources : undefined;
+  if (sources?.length) {
+    const formattedSources = sources
+      .map((source) => sanitizeText(source))
+      .filter(Boolean) as string[];
+    if (formattedSources.length) {
+      lines.push(`— Источники базы СРВТ: ${formattedSources.join(', ')}`);
+    }
   }
 
-  const riskLevel = metadata.riskLevel;
-  if (typeof riskLevel === 'string') {
-    lines.push(`— Риск: ${formatLevelValue(riskLevel, riskLevelLabels)}`);
+  if (typeof metadata.riskLevel === 'string') {
+    const riskLabel = sanitizeText(formatLevelValue(metadata.riskLevel, riskLevelLabels));
+    if (riskLabel) {
+      lines.push(`— Риск: ${riskLabel}`);
+    }
   }
 
-  const potentialValue = metadata.potentialValue;
-  if (typeof potentialValue === 'string') {
-    lines.push(`— Потенциал: ${formatLevelValue(potentialValue, potentialLevelLabels)}`);
+  if (typeof metadata.potentialValue === 'string') {
+    const potentialLabel = sanitizeText(
+      formatLevelValue(metadata.potentialValue, potentialLevelLabels)
+    );
+    if (potentialLabel) {
+      lines.push(`— Потенциал: ${potentialLabel}`);
+    }
   }
 
-  const kbUsed = metadata.kbUsed;
-  if (typeof kbUsed === 'boolean') {
-    lines.push(`— База знаний СРВТ: ${kbUsed ? 'использована' : 'не задействована'}`);
+  if (typeof metadata.kbUsed === 'boolean') {
+    const knowledgeStatus = metadata.kbUsed ? 'использована' : 'не задействована';
+    lines.push(`— База знаний СРВТ: ${escapeMarkdown(knowledgeStatus)}`);
   }
 
   const answers = metadata.answers;
   if (answers && typeof answers === 'object') {
     const values = Object.values(answers as Record<string, unknown>)
-      .map((value) => (typeof value === 'string' ? value : undefined))
+      .map((value) => sanitizeText(value))
       .filter(Boolean) as string[];
     if (values.length) {
       lines.push(`— Детали запроса: ${values.join(', ')}`);
     }
   }
 
-  const text = metadata.text;
-  if (typeof text === 'string' && text.trim()) {
-    lines.push(`— Текст кейса: ${truncate(text.trim(), 200)}`);
+  if (typeof metadata.text === 'string' && metadata.text.trim()) {
+    const caseText = sanitizeText(truncate(metadata.text.trim(), 200));
+    if (caseText) {
+      lines.push(`— Текст кейса: ${caseText}`);
+    }
   }
 
   const input = metadata.input;
   if (input && typeof input === 'object' && !Array.isArray(input)) {
     const record = input as Record<string, unknown>;
     const details: string[] = [];
-    if (typeof record.entityType === 'string') {
-      details.push(`форма: ${record.entityType}`);
+    const entityType = sanitizeText(record.entityType);
+    if (entityType) {
+      details.push(`форма: ${entityType}`);
     }
-    if (typeof record.costType === 'string') {
-      details.push(`затраты: ${record.costType}`);
+    const costType = sanitizeText(record.costType);
+    if (costType) {
+      details.push(`затраты: ${costType}`);
     }
     if (typeof record.spend === 'number') {
-      details.push(`сумма: ${formatCurrency(record.spend)}`);
+      details.push(`сумма: ${escapeMarkdown(formatCurrency(record.spend))}`);
     }
     if (typeof record.hasExport === 'boolean') {
-      details.push(`экспорт: ${record.hasExport ? 'да' : 'нет'}`);
+      details.push(`экспорт: ${escapeMarkdown(record.hasExport ? 'да' : 'нет')}`);
     }
-    if (typeof record.region === 'string') {
-      details.push(`регион: ${record.region}`);
+    const region = sanitizeText(record.region);
+    if (region) {
+      details.push(`регион: ${region}`);
     }
     if (details.length) {
       lines.push(`— Параметры субсидии: ${details.join(', ')}`);
     }
   }
 
-  if (typeof metadata.spendRangeLabel === 'string') {
-    lines.push(`— Диапазон затрат: ${metadata.spendRangeLabel}`);
+  const spendRange = sanitizeText(metadata.spendRangeLabel);
+  if (spendRange) {
+    lines.push(`— Диапазон затрат: ${spendRange}`);
   }
 
   const results = metadata.results;
@@ -442,9 +458,11 @@ const buildContextLines = (
       .map((result) => {
         if (result && typeof result === 'object' && 'title' in result) {
           const record = result as Record<string, unknown>;
-          const title = typeof record.title === 'string' ? record.title : undefined;
+          const title = sanitizeText(record.title);
           const code =
-            typeof record.programCode === 'string' ? record.programCode.toUpperCase() : undefined;
+            typeof record.programCode === 'string'
+              ? escapeMarkdown(record.programCode.toUpperCase())
+              : undefined;
           if (title) {
             return code ? `${code}: ${title}` : title;
           }
@@ -461,6 +479,63 @@ const buildContextLines = (
   return lines;
 };
 
+const buildServiceBlocks = (metadata?: Record<string, unknown>): string[] => {
+  if (!metadata) {
+    return [];
+  }
+
+  const type = sanitizeText(metadata.serviceType);
+  const offer = sanitizeText(metadata.serviceOffer);
+  const firstInput =
+    typeof metadata.serviceFirstInput === 'string'
+      ? sanitizeText(truncate(metadata.serviceFirstInput, 200))
+      : undefined;
+  const clarification =
+    typeof metadata.serviceClarification === 'string'
+      ? sanitizeText(truncate(metadata.serviceClarification, 200))
+      : undefined;
+  const question = sanitizeText(metadata.serviceClarifyQuestion);
+  const dialog =
+    Array.isArray(metadata.serviceDialog) && metadata.serviceDialog.length
+      ? (metadata.serviceDialog as { role?: string; text: string }[])
+      : undefined;
+
+  if (!type && !offer && !firstInput && !clarification && !question && !dialog) {
+    return [];
+  }
+
+  const blocks: string[] = ['', '*Услуга СРВТ:*'];
+  if (type) {
+    blocks.push(`Тип услуги: ${type}`);
+  }
+  if (firstInput || clarification) {
+    blocks.push('Ответы клиента:');
+    if (firstInput) {
+      blocks.push(`— первый ввод: ${firstInput}`);
+    }
+    if (clarification) {
+      blocks.push(`— уточняющий ответ: ${clarification}`);
+    }
+  }
+  if (offer) {
+    blocks.push(`Оффер: ${offer}`);
+  }
+  if (question) {
+    blocks.push(`Уточняющий вопрос: ${question}`);
+  }
+  if (dialog?.length) {
+    blocks.push('Диалог (фрагмент):');
+    dialog.slice(-4).forEach((turn) => {
+      const prefix = turn.role === 'assistant' ? 'SRVT' : 'Клиент';
+      const turnText = sanitizeText(turn.text);
+      if (turnText) {
+        blocks.push(`— ${prefix}: ${turnText}`);
+      }
+    });
+  }
+  return blocks;
+};
+
 const buildSolutionBlocks = (
   metadata?: (Record<string, unknown> & ConversationMetadata) | undefined
 ): string[] => {
@@ -470,8 +545,9 @@ const buildSolutionBlocks = (
 
   const blocks: string[] = [];
   const managerSummary = metadata.solutionManagerSummary;
-  if (typeof managerSummary === 'string' && managerSummary.trim()) {
-    blocks.push('', '*Резюме от ассистента:*', managerSummary.trim());
+  const summaryText = sanitizeText(managerSummary);
+  if (summaryText) {
+    blocks.push('', '*Резюме от ассистента:*', summaryText);
   }
 
   const dialog = metadata.solutionDialog;
@@ -480,10 +556,13 @@ const buildSolutionBlocks = (
     const lastTurns = dialog.slice(-6);
     for (const turn of lastTurns) {
       const prefix = turn.role === 'assistant' ? 'Бот' : 'Клиент';
-      blocks.push(`— ${prefix}: ${turn.text}`);
+      const turnText = sanitizeText(turn.text);
+      if (turnText) {
+        blocks.push(`— ${prefix}: ${turnText}`);
+      }
     }
     if (dialog.length > lastTurns.length) {
-      blocks.push('— … (остальные реплики сохранены в системе)');
+      blocks.push('— … остальные реплики сохранены в системе');
     }
   }
 
@@ -519,20 +598,26 @@ const buildSubsidyBlocks = (metadata?: Record<string, unknown>): string[] => {
 
   if (classification) {
     blocks.push('', '*Субсидии:*');
-    const regionLabel = formatSubsidyRegionLabel(classification.region);
+    const regionLabel = escapeMarkdown(formatSubsidyRegionLabel(classification.region));
     const costTypes = classification.costTypes
-      .map((type) => subsidyCostTypeLabels[type] ?? type)
+      .map((type) => escapeMarkdown(subsidyCostTypeLabels[type] ?? type))
       .join(', ');
     const budgetLabel = formatBudgetRange(classification.budgetFrom, classification.budgetTo);
+    const budgetText = budgetLabel ? escapeMarkdown(budgetLabel) : undefined;
+    const sectorText = classification.sectors.length
+      ? escapeMarkdown(subsidySectorLabels[classification.sectors[0]] ?? classification.sectors[0])
+      : undefined;
+    const notes = classification.notes
+      ? sanitizeText(truncate(classification.notes, 120))
+      : undefined;
+
     const details: Array<string | undefined> = [
-      classification.sectors.length
-        ? `— Сектор: ${subsidySectorLabels[classification.sectors[0]] ?? classification.sectors[0]}`
-        : undefined,
-      `— Экспорт: ${formatExportStatus(classification.export)}`,
+      sectorText ? `— Сектор: ${sectorText}` : undefined,
+      `— Экспорт: ${escapeMarkdown(formatExportStatus(classification.export))}`,
       `— Регион: ${regionLabel}`,
-      budgetLabel ? `— Бюджет: ${budgetLabel}` : undefined,
+      budgetText ? `— Бюджет: ${budgetText}` : undefined,
       costTypes ? `— Затраты: ${costTypes}` : undefined,
-      classification.notes ? `— Заметки: ${truncate(classification.notes, 120)}` : undefined
+      notes ? `— Заметки: ${notes}` : undefined
     ];
     blocks.push(...(details.filter(Boolean) as string[]));
   }
@@ -543,15 +628,17 @@ const buildSubsidyBlocks = (metadata?: Record<string, unknown>): string[] => {
       classification,
       hasAmountEstimate
     );
-    blocks.push('', '*Ответ бота пользователю:*', estimationPreview);
+    blocks.push('', '*Ответ бота пользователю:*', escapeMarkdown(estimationPreview));
   }
 
   if (programs?.length) {
     blocks.push('', '*Подобранные программы:*');
     programs.slice(0, 3).forEach((program, index) => {
-      blocks.push(
-        `${index + 1}) ${truncate(program.title, 70)} (до ${formatCurrency(program.estimatedAmount)})`
-      );
+      const title = sanitizeText(truncate(program.title, 70));
+      const amount = escapeMarkdown(formatCurrency(program.estimatedAmount));
+      if (title) {
+        blocks.push(`${index + 1}) ${title} (до ${amount})`);
+      }
     });
   }
 
@@ -559,7 +646,10 @@ const buildSubsidyBlocks = (metadata?: Record<string, unknown>): string[] => {
     blocks.push('', '*Диалог (фрагмент):*');
     dialog.slice(-4).forEach((turn) => {
       const prefix = turn.role === 'assistant' ? 'SRVT AI' : 'Клиент';
-      blocks.push(`— ${prefix}: ${turn.text}`);
+      const turnText = sanitizeText(turn.text);
+      if (turnText) {
+        blocks.push(`— ${prefix}: ${turnText}`);
+      }
     });
   }
 
@@ -619,6 +709,14 @@ const potentialLevelLabels: Record<string, string> = {
   low: 'ограниченный',
   medium: 'заметный',
   high: 'высокий'
+};
+
+const sanitizeText = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed ? escapeMarkdown(trimmed) : undefined;
 };
 
 const formatRiskSummary = (

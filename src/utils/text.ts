@@ -73,4 +73,9 @@ const slicesPush = (chunks: string[], value: string) => {
   }
 };
 
+const MARKDOWN_ESCAPE_REGEX = /([\\_*\\[\\]~`>#+=|{}])/g;
+
+export const escapeMarkdown = (text: string): string =>
+  text.replace(MARKDOWN_ESCAPE_REGEX, '\\$1');
+
 

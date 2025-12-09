@@ -60,8 +60,13 @@ export interface ServiceDialogState {
   category: ServiceCategory;
   dialog: SolutionDialogTurn[];
   turnCount: number;
-  aiReady?: boolean;
-  completed?: boolean;
+  stage: 'awaiting_initial' | 'awaiting_clarification' | 'awaiting_ai' | 'ready';
+  offer: string;
+  description: string;
+  clarifyQuestion: string;
+  managerLabel: string;
+  firstInput?: string;
+  clarification?: string;
 }
 
 export interface CaseInsight {

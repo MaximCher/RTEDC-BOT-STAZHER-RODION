@@ -8,37 +8,21 @@ import {
   SubsidyRegion
 } from '../types/subsidy';
 import { logger } from '../utils/logger';
-import { getAllPrograms } from './subsidyRepository';
-
-const CACHE_TTL_MS = 5 * 60 * 1000;
-let cache: { data: SubsidyProgram[]; expiresAt: number } | null = null;
-
-const loadPrograms = async (): Promise<SubsidyProgram[]> => {
-  if (cache && cache.expiresAt > Date.now()) {
-    return cache.data;
-  }
-
-  const programs = await getAllPrograms();
-  cache = { data: programs, expiresAt: Date.now() + CACHE_TTL_MS };
-  return programs;
-};
+import { getProgramsForClassification } from './subsidyKnowledge';
 
 export const calculateSubsidyResult = async (
   classification: SubsidyClassification
 ): Promise<SubsidyEstimationResult> => {
-  const programs = await loadPrograms();
+  const programs = await getProgramsForClassification(classification);
   const matches = findBestPrograms({ classification }, programs);
+
+  const effectiveMatches = matches.length ? matches : buildFallbackMatches(programs, classification);
 
   if (!matches.length) {
     logger.info('subsidy_matches_empty', { classification });
-    return {
-      programs: [],
-      metadataPrograms: [],
-      hasAmountEstimate: false
-    };
   }
 
-  const metadataPrograms = matches.slice(0, 5).map(toEstimatedProgram);
+  const metadataPrograms = effectiveMatches.slice(0, 5).map(toEstimatedProgram);
   const positivePrograms = metadataPrograms.filter((program) => program.estimatedAmount > 0);
 
   if (shouldLogItMoscow(classification)) {
@@ -49,7 +33,7 @@ export const calculateSubsidyResult = async (
   }
 
   return {
-    programs: positivePrograms.slice(0, 3),
+    programs: (positivePrograms.length ? positivePrograms : metadataPrograms).slice(0, 3),
     metadataPrograms,
     hasAmountEstimate: positivePrograms.length > 0
   };
@@ -79,6 +63,18 @@ export const findBestPrograms = (
   });
 
   return sorted;
+};
+
+const buildFallbackMatches = (
+  programs: SubsidyProgram[],
+  classification: SubsidyClassification
+): SubsidyMatchScore[] => {
+  const budgetRange = resolveBudgetRange(classification);
+  return programs.slice(0, 10).map((program) => ({
+    program,
+    score: 1,
+    estimatedAmount: computeEstimatedAmount(program, budgetRange)
+  }));
 };
 
 const SECTOR_SYNONYMS: Record<string, string[]> = {
@@ -171,14 +167,12 @@ const scoreProgram = (
 
   if (matchesRegion(program.regions, classification.region)) {
     score += 2;
-  } else {
-    return null;
   }
 
   if (program.isExport && classification.export === true) {
     score += 2;
-  } else if (program.isExport && classification.export === false) {
-    return null;
+  } else if (program.isExport) {
+    score += 1;
   }
 
   const budgetRange = resolveBudgetRange(classification);

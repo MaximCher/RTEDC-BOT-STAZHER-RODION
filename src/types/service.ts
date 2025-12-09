@@ -1,18 +1,18 @@
 export type ServiceCategory =
-  | 'counterparty'
+  | 'international_transactions'
+  | 'loans'
   | 'logistics'
-  | 'payments'
-  | 'finance_tools'
-  | 'it_scale'
-  | 'expansion';
+  | 'negotiations'
+  | 'translations'
+  | 'analytics';
 
 export const serviceCategoryLabels: Record<ServiceCategory, string> = {
-  counterparty: 'Проверка контрагента',
-  logistics: 'Импорт и логистика',
-  payments: 'Платежи и валютный контроль',
-  finance_tools: 'Финансовые инструменты',
-  it_scale: 'IT / масштабирование',
-  expansion: 'Выход на зарубежные рынки'
+  international_transactions: 'Международные транзакции',
+  loans: 'Льготные кредиты',
+  logistics: 'Международная логистика',
+  negotiations: 'Сопровождение переговоров',
+  translations: 'Лингвистические переводы',
+  analytics: 'Аналитика ВЭД и проверка контрагентов'
 };
 
 

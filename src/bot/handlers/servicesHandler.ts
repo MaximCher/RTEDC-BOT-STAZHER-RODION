@@ -1,16 +1,17 @@
 import { Telegraf } from 'telegraf';
 import { CustomContext } from '../../types/context';
-import { Direction } from '../../types/lead';
 import {
-  servicesMenuKeyboard,
-  serviceCtaKeyboard,
-  financeServiceKeyboard
+  servicesMenuKeyboard
 } from '../keyboards/services';
-import { messages, getDirectionLabel } from '../messages';
+import { messages } from '../messages';
 import { startLeadForm } from './leadHandler';
 import { withCallbackGuard } from '../../utils/callbackGuard';
 import { resetFlow } from '../../types/session';
-import { isServiceCategory, serviceCategoryToDirection } from '../../config/servicePlaybook';
+import {
+  isServiceCategory,
+  serviceCategoryToDirection,
+  SERVICE_PLAYBOOK
+} from '../../config/servicePlaybook';
 import { startServiceDialog } from './serviceDialogHandler';
 
 export const registerServicesHandlers = (bot: Telegraf<CustomContext>) => {
@@ -26,15 +27,11 @@ export const registerServicesHandlers = (bot: Telegraf<CustomContext>) => {
     /^srvt:services:view:(?<category>[a-z_]+)/,
     withCallbackGuard(async (ctx) => {
       const rawCategory = ctx.match?.groups?.category ?? '';
-      if (isServiceCategory(rawCategory)) {
-        await startServiceDialog(ctx, rawCategory);
+      if (!isServiceCategory(rawCategory)) {
+        await ctx.answerCbQuery('Направление временно недоступно', { show_alert: true });
         return;
       }
-      const direction = (rawCategory as Direction) ?? 'other';
-      const body = `${messages.serviceDescription(direction)}\n\n${messages.serviceCta}`;
-      const keyboard =
-        direction === 'finance' ? financeServiceKeyboard() : serviceCtaKeyboard(direction);
-      await ctx.reply(body, keyboard);
+      await startServiceDialog(ctx, rawCategory);
     })
   );
 
@@ -43,23 +40,37 @@ export const registerServicesHandlers = (bot: Telegraf<CustomContext>) => {
     withCallbackGuard(async (ctx) => {
       const slug = ctx.match?.groups?.slug ?? 'other';
       const serviceState = ctx.session.serviceDialog;
-      const direction = isServiceCategory(slug)
-        ? serviceCategoryToDirection(slug)
-        : ((slug as Direction) ?? 'other');
+      const playbook = isServiceCategory(slug) ? SERVICE_PLAYBOOK[slug] : undefined;
+      const direction = playbook ? serviceCategoryToDirection(playbook.category) : 'other';
       const metadata =
-        serviceState && (!isServiceCategory(slug) || serviceState.category === slug)
+        playbook && serviceState && serviceState.category === slug
           ? {
               serviceCategory: serviceState.category,
               serviceDialog: serviceState.dialog.slice(-10),
-              serviceTurnCount: serviceState.turnCount
+              serviceTurnCount: serviceState.turnCount,
+              serviceType: serviceState.managerLabel,
+              serviceOffer: serviceState.offer,
+              serviceDescription: serviceState.description,
+              serviceClarifyQuestion: serviceState.clarifyQuestion,
+              serviceFirstInput: serviceState.firstInput,
+              serviceClarification: serviceState.clarification,
+              service: serviceState.managerLabel
             }
-          : undefined;
+          : playbook
+            ? {
+                serviceCategory: playbook.category,
+                serviceType: playbook.managerLabel,
+                serviceOffer: playbook.offer,
+                serviceDescription: playbook.description,
+                serviceClarifyQuestion: playbook.clarifyQuestion,
+                service: playbook.managerLabel
+              }
+            : undefined;
       await startLeadForm(ctx, {
-        scenario: `service_${slug}`,
+        scenario: playbook?.leadScenario ?? `service_${slug}`,
         direction,
         metadata: {
-          ...(metadata ?? {}),
-          service: getDirectionLabel(direction)
+          ...(metadata ?? {})
         }
       });
     })

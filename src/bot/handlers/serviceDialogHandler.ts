@@ -1,16 +1,11 @@
 import { CustomContext } from '../../types/context';
 import { resetFlow, ServiceDialogState, SolutionDialogTurn } from '../../types/session';
 import { ServiceCategory } from '../../types/service';
-import {
-  SERVICE_PLAYBOOK,
-  isServiceCategory
-} from '../../config/servicePlaybook';
+import { SERVICE_PLAYBOOK, isServiceCategory } from '../../config/servicePlaybook';
 import { serviceDialogKeyboard } from '../keyboards/services';
-import { nextServiceConsultationStep } from '../../services/aiAssistant';
-import { logger } from '../../utils/logger';
 import { splitToTelegramChunks } from '../../utils/text';
-
-const MAX_CLARIFY_TURNS = 3;
+import { messages } from '../messages';
+import { nextServiceConsultationStep } from '../../services/aiAssistant';
 
 export const startServiceDialog = async (
   ctx: CustomContext,
@@ -21,16 +16,23 @@ export const startServiceDialog = async (
     return;
   }
   resetFlow(ctx.session, 'service_consultation');
+  const introText = [playbook.offer, playbook.description, messages.serviceScenarioInitialPrompt]
+    .filter(Boolean)
+    .join('\n\n');
+
   const state: ServiceDialogState = {
     category,
     dialog: [],
     turnCount: 0,
-    aiReady: false,
-    completed: false
+    stage: 'awaiting_initial',
+    offer: playbook.offer,
+    description: playbook.description,
+    clarifyQuestion: playbook.clarifyQuestion,
+    managerLabel: playbook.managerLabel
   };
   ctx.session.serviceDialog = state;
-  appendTurn(state.dialog, 'assistant', playbook.intro);
-  await sendChunkedReplies(ctx, playbook.intro, serviceDialogKeyboard(category, 'clarify'));
+  appendTurn(state.dialog, 'assistant', introText);
+  await sendChunkedReplies(ctx, introText, serviceDialogKeyboard(category));
 };
 
 export const handleServiceDialogText = async (ctx: CustomContext): Promise<boolean> => {
@@ -45,39 +47,32 @@ export const handleServiceDialogText = async (ctx: CustomContext): Promise<boole
   if (!text) {
     return false;
   }
+  const playbook = SERVICE_PLAYBOOK[state.category];
+  if (!playbook) {
+    return false;
+  }
+
   appendTurn(state.dialog, 'user', text);
   state.turnCount += 1;
 
-  try {
-    const aiStep = await nextServiceConsultationStep(state.category, state.dialog);
-    const stillNeedDetails =
-      aiStep.needMore && state.turnCount < MAX_CLARIFY_TURNS && !state.completed;
-    if (!stillNeedDetails) {
-      state.completed = true;
-    }
-    const enrichedMessage = buildSellingMessage(
-      aiStep.botMessage || SERVICE_PLAYBOOK[state.category].defaultFollowUp,
-      state.category,
-      stillNeedDetails
-    );
-    appendTurn(state.dialog, 'assistant', enrichedMessage);
-    await sendChunkedReplies(
-      ctx,
-      enrichedMessage,
-      serviceDialogKeyboard(state.category, stillNeedDetails ? 'clarify' : 'cta')
-    );
-    return true;
-  } catch (error) {
-    logger.error('service_dialog_step_failed', {
-      error: error instanceof Error ? { message: error.message, stack: error.stack } : error
-    });
-    const fallback =
-      SERVICE_PLAYBOOK[state.category].defaultFollowUp ??
-      'Давайте передам кейс эксперту, чтобы он быстро подсказал, как двигаться дальше.';
-    appendTurn(state.dialog, 'assistant', fallback);
-    await sendChunkedReplies(ctx, fallback, serviceDialogKeyboard(state.category, 'clarify'));
-    return true;
+  if (state.stage === 'awaiting_initial') {
+    state.firstInput = text;
   }
+
+  // AI mini-консультация
+  const aiStep = await nextServiceConsultationStep(state.category, state.dialog);
+  appendTurn(state.dialog, 'assistant', aiStep.botMessage);
+
+  // Если данных достаточно — усиливаем CTA
+  const replyText = aiStep.needMore
+    ? aiStep.botMessage
+    : [aiStep.botMessage, messages.serviceScenarioReady].filter(Boolean).join('\n\n');
+
+  state.stage = aiStep.needMore ? 'awaiting_ai' : 'ready';
+  state.clarification = text;
+
+  await sendChunkedReplies(ctx, replyText, serviceDialogKeyboard(state.category));
+  return true;
 };
 
 export const isServiceDialogCategory = (value: string): value is ServiceCategory =>
@@ -111,35 +106,3 @@ const sendChunkedReplies = async (
     await ctx.reply(chunks[i], chunkKeyboard);
   }
 };
-
-const buildSellingMessage = (
-  raw: string,
-  category: ServiceCategory,
-  needClarify: boolean
-): string => {
-  const normalized = raw
-    .replace(/\.\.\./g, '.')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (!normalized) {
-    return SERVICE_PLAYBOOK[category].defaultFollowUp;
-  }
-  const sentences = splitIntoSentences(normalized);
-  const limit = needClarify ? 3 : 4;
-  const selected = sentences.slice(0, limit);
-  const body = selected.join(' ').trim();
-  const closer = needClarify
-    ? 'Чтобы подобрать точнее, напишите дополнительную информацию — и я сразу подключу эксперта СРВТ.'
-    : SERVICE_PLAYBOOK[category].closingHook;
-  return [body, closer].filter(Boolean).join('\n\n');
-};
-
-const splitIntoSentences = (text: string): string[] => {
-  const matches = text.match(/[^.!?…]+[.!?…]?/g);
-  if (!matches) {
-    return [text];
-  }
-  return matches.map((sentence) => sentence.trim()).filter(Boolean);
-};
-
-
