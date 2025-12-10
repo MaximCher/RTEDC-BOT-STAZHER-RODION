@@ -13,6 +13,7 @@ import {
   SERVICE_PLAYBOOK
 } from '../../config/servicePlaybook';
 import { startServiceDialog } from './serviceDialogHandler';
+import { submitLeadImmediate } from './leadHandler';
 
 export const registerServicesHandlers = (bot: Telegraf<CustomContext>) => {
   bot.action(
@@ -66,13 +67,22 @@ export const registerServicesHandlers = (bot: Telegraf<CustomContext>) => {
                 service: playbook.managerLabel
               }
             : undefined;
-      await startLeadForm(ctx, {
-        scenario: playbook?.leadScenario ?? `service_${slug}`,
+      const scenario = playbook?.leadScenario ?? `service_${slug}`;
+      ctx.session.leadForm = {
+        scenario,
         direction,
-        metadata: {
-          ...(metadata ?? {})
-        }
-      });
+        step: 'confirm',
+        lead: {
+          source: 'srvt_bot',
+          scenario,
+          direction,
+          userId: ctx.from?.id ?? 0
+        },
+        metadata: metadata ?? {},
+        introMessage: undefined,
+        contactAsked: true
+      };
+      await submitLeadImmediate(ctx, scenario);
     })
   );
 };

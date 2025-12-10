@@ -262,57 +262,98 @@ export const formatSubsidyEstimationForUser = (
   classification: SubsidyClassification,
   hasAmountEstimate: boolean
 ): string => {
-  if (!hasAmountEstimate || !programs.length) {
-    return [
-      messages.subsidyManualEstimate,
-      '',
-      messages.subsidyEstimationDisclaimer
-    ].join('\n');
-  }
+  const isItCase = classification.sectors.includes('it');
+  const excludePatterns = [/агротур/i, /сельск/i, /туризм/i, /агро/i, /ферм/i, /нефтегаз/i];
+  const safePrograms = isItCase
+    ? programs.filter((p) => !excludePatterns.some((re) => re.test(p.title)))
+    : programs;
 
-  const positiveAmounts = programs
+  const positiveAmounts = safePrograms
     .map((program) => program.estimatedAmount)
     .filter((value) => value > 0);
   const maxAmount = Math.max(...positiveAmounts, 0);
-  const minAmount = Math.min(...positiveAmounts, maxAmount);
+  const programsCount = safePrograms.length;
 
-  const header = `💰 Предварительный расчёт: до ${formatCurrency(maxAmount)} по ${programs.length} программам поддержки`;
-  const confident =
-    classification.costTypes.length > 0 &&
-    ((classification.budgetTo ?? classification.budgetFrom ?? 0) > 0);
-  const rangeLine =
-    minAmount && minAmount !== maxAmount
-      ? `Ориентировочно можно рассчитывать на ${formatCurrency(minAmount)}–${formatCurrency(
-          maxAmount
-        )}.`
-      : `Ориентировочно можно рассчитывать до ${formatCurrency(maxAmount)}.`;
+  const sectorName =
+    classification.sectors.length && classification.sectors[0] !== 'other'
+      ? subsidySectorLabels[classification.sectors[0]] ?? classification.sectors[0]
+      : '—';
+  const regionName = formatSubsidyRegionLabel(classification.region);
+  const userBudget =
+    formatBudgetRange(classification.budgetFrom, classification.budgetTo) || '—';
+  const budgetDisplay =
+    userBudget === '—' || userBudget.includes('₽') ? userBudget : `${userBudget} ₽`;
+  const exportInfo = formatExportStatus(classification.export);
 
-  const summaryLine = confident
-    ? `По вашим вводным субсидия выглядит очень реалистично. ${rangeLine}`
-    : `По вашим вводным субсидия возможна. ${rangeLine}`;
+  const programsList =
+    safePrograms.slice(0, 3).map((p) => {
+      const amount =
+        typeof p.estimatedAmount === 'number' && p.estimatedAmount > 0
+          ? formatCurrency(p.estimatedAmount)
+          : '—';
+      return `▫️ ${truncate(p.title, 120)} — до ${amount} ₽`;
+    }) || [];
 
-  const profileBlock = buildSubsidyProfileBlock(classification);
+  const programsBlock =
+    programsList.length > 0
+      ? programsList.join('\\n')
+      : '▫️ Пока нет явных программ по заданным параметрам. Эксперт подберёт альтернативы.';
 
-  const listIntro = 'Топ программ:';
-  const items = programs.slice(0, 3).map((program, index) => {
-    const coverage =
-      typeof program.coveragePercent === 'number' ? ` (до ${program.coveragePercent}%)` : '';
-    const description = program.description ? `\n   ${truncate(program.description, 120)}` : '';
-    return `${index + 1}) ${truncate(program.title, 90)} — до ${formatCurrency(
-      program.estimatedAmount
-    )}${coverage}${description}`;
+  return formatSubsidyAnswer({
+    maxAmount: maxAmount || 0,
+    programsCount,
+    sector: sectorName,
+    region: regionName,
+    budget: classification.budgetTo ?? classification.budgetFrom ?? null,
+    exportInfo,
+    programs: safePrograms.map((p) => ({
+      title: truncate(p.title, 120),
+      maxAmount: typeof p.estimatedAmount === 'number' ? p.estimatedAmount : null
+    }))
   });
-
-  const footer = [messages.subsidyEstimationDisclaimer, messages.subsidyEstimationCta]
-    .filter(Boolean)
-    .join('\n');
-
-  const lines = [header, '', summaryLine, profileBlock, '', listIntro, ...items, '', footer].filter(
-    Boolean
-  ) as string[];
-
-  return squeezeToTelegramLimit(lines);
 };
+
+function formatSubsidyAnswer(params: {
+  maxAmount: number;
+  programsCount: number;
+  sector: string;
+  region: string;
+  budget: number | null;
+  exportInfo: string;
+  programs: { title: string; maxAmount?: number | null }[];
+}): string {
+  const formatMoney = (value?: number | null) =>
+    typeof value === 'number' ? value.toLocaleString('ru-RU') : '—';
+
+  const programsList =
+    params.programs.length > 0
+      ? params.programs
+          .map((p) => {
+            const amountPart =
+              typeof p.maxAmount === 'number'
+                ? ` — до ${formatMoney(p.maxAmount)} ₽`
+                : '';
+            return `▫️ ${p.title}${amountPart}`;
+          })
+          .join('\n')
+      : '▫️ Подходящие программы не найдены, но эксперт сможет предложить альтернативы.';
+
+  return (
+    `💰 *Предварительный расчёт*\n` +
+    `По вашим вводным субсидия возможна. Ориентировочный диапазон: *до ${formatMoney(
+      params.maxAmount
+    )} ₽* (по ${params.programsCount} подходящим программам поддержки).\n\n` +
+    `📌 *Профиль кейса:*\n` +
+    `• Сектор: ${params.sector}\n` +
+    `• Регион: ${params.region}\n` +
+    `• Бюджет: ${formatMoney(params.budget)} ₽\n` +
+    `• Экспорт: ${params.exportInfo}\n\n` +
+    `🏆 *Топ программ, которые подходят под ваш кейс:*\n` +
+    `${programsList}\n\n` +
+    `⚠️ Это предварительный расчёт. Итоговая сумма зависит от отбора и пакета документов.\n` +
+    `Чтобы перейти к оформлению и не потерять деньги в бюджете — нажмите *«Отправить данные эксперту»*, и мы подключим команду СРВТ для сопровождения заявки до выплаты.`
+  );
+}
 
 const buildSubsidyProfileBlock = (classification: SubsidyClassification): string => {
   const lines: string[] = [];
@@ -339,13 +380,7 @@ const buildSubsidyProfileBlock = (classification: SubsidyClassification): string
   return lines.length ? ['Профиль кейса:', ...lines].join('\n') : '';
 };
 
-const squeezeToTelegramLimit = (lines: string[]): string => {
-  const text = lines.join('\n');
-  if (text.length <= TELEGRAM_MESSAGE_LIMIT) {
-    return text;
-  }
-  return `${text.slice(0, TELEGRAM_MESSAGE_LIMIT - 1)}…`;
-};
+const squeezeToTelegramLimit = (lines: string[]): string => lines.join('\n');
 
 export const getScenarioLabel = (scenario: string): string =>
   scenarioLabels[scenario] ?? `Сценарий: ${scenario}`;
@@ -741,8 +776,16 @@ const formatLevelValue = (
 const formatCurrency = (value: number): string =>
   `${Math.round(value).toLocaleString('ru-RU')} ₽`;
 
-const truncate = (text: string, limit: number): string =>
-  text.length > limit ? `${text.slice(0, limit)}…` : text;
+const truncate = (text: string, limit: number): string => {
+  if (text.length <= limit) {
+    return text;
+  }
+  const cut = text.lastIndexOf(' ', limit);
+  if (cut === -1) {
+    return text.slice(0, limit);
+  }
+  return text.slice(0, cut).trim();
+};
 
 const formatPriority = (score?: number): string => {
   if (typeof score !== 'number') {

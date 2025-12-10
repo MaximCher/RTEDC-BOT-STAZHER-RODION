@@ -69,6 +69,7 @@ export interface EstimatedProgram {
   coveragePercent?: number;
   description?: string;
   score?: number;
+  sectors?: string[];
 }
 
 export interface HybridSubsidyInput {

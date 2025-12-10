@@ -1,258 +1,51 @@
 import {
   EstimatedProgram,
-  HybridSubsidyInput,
   SubsidyClassification,
   SubsidyEstimationResult,
-  SubsidyMatchScore,
   SubsidyProgram,
   SubsidyRegion
 } from '../types/subsidy';
 import { logger } from '../utils/logger';
-import { getProgramsForClassification } from './subsidyKnowledge';
+import {
+  CompanySector,
+  normalizeProgramSectors
+} from './subsidies/companyProfile';
+import {
+  matchSubsidies,
+  SubsidyMatchContext,
+  SubsidyMatchResult
+} from './subsidies/matchSubsidies';
+
+// Подбор программ: берём SubsidyProgram из Postgres, жёстко фильтруем по отрасли (CompanySector),
+// отбрасываем несоответствующие бюджету/региону, начисляем бонусы за регион/федеральность,
+// сортируем по score и отдаём TOP-3. Для IT дополнительно удаляются агро/туризм/сельск.
 
 export const calculateSubsidyResult = async (
   classification: SubsidyClassification
 ): Promise<SubsidyEstimationResult> => {
-  const programs = await getProgramsForClassification(classification);
-  const matches = findBestPrograms({ classification }, programs);
-
-  const effectiveMatches = matches.length ? matches : buildFallbackMatches(programs, classification);
+  const ctx = buildMatchContext(classification);
+  const matches = await matchSubsidies(ctx);
 
   if (!matches.length) {
-    logger.info('subsidy_matches_empty', { classification });
+    logger.info('subsidy_matches_empty', { classification, ctx });
   }
 
-  const metadataPrograms = effectiveMatches.slice(0, 5).map(toEstimatedProgram);
-  const positivePrograms = metadataPrograms.filter((program) => program.estimatedAmount > 0);
-
-  if (shouldLogItMoscow(classification)) {
-    logger.info('subsidy_calc_it_moscow', {
-      classification,
-      preview: positivePrograms.slice(0, 3)
-    });
-  }
+  const budgetRange = resolveBudgetRange(classification);
+  const estimated = matches.map((match) => toEstimatedProgram(match, budgetRange));
+  const positivePrograms = estimated.filter((program) => program.estimatedAmount > 0);
 
   return {
-    programs: (positivePrograms.length ? positivePrograms : metadataPrograms).slice(0, 3),
-    metadataPrograms,
+    programs: (positivePrograms.length ? positivePrograms : estimated).slice(0, 3),
+    metadataPrograms: estimated,
     hasAmountEstimate: positivePrograms.length > 0
   };
 };
 
-export const findBestPrograms = (
-  input: HybridSubsidyInput,
-  allPrograms: SubsidyProgram[]
-): SubsidyMatchScore[] => {
-  const matches: SubsidyMatchScore[] = [];
-
-  for (const program of allPrograms) {
-    const match = scoreProgram(program, input.classification);
-    if (!match) {
-      continue;
-    }
-    logProgramMatch(program, input.classification, match);
-    matches.push(match);
-  }
-
-  const validMatches = matches.filter((match) => match.score > 0);
-  const sorted = (validMatches.length ? validMatches : matches).sort((a, b) => {
-    if (b.score === a.score) {
-      return b.estimatedAmount - a.estimatedAmount;
-    }
-    return b.score - a.score;
-  });
-
-  return sorted;
-};
-
-const buildFallbackMatches = (
-  programs: SubsidyProgram[],
-  classification: SubsidyClassification
-): SubsidyMatchScore[] => {
-  const budgetRange = resolveBudgetRange(classification);
-  return programs.slice(0, 10).map((program) => ({
-    program,
-    score: 1,
-    estimatedAmount: computeEstimatedAmount(program, budgetRange)
-  }));
-};
-
-const SECTOR_SYNONYMS: Record<string, string[]> = {
-  it: ['it', 'digital', 'technology', 'tech', 'инновац', 'цифров', 'software', 'development'],
-  logistics: ['logistics', 'supply', 'freight', 'warehouse', 'склад', 'перевоз'],
-  tourism: ['tourism', 'travel', 'hospitality', 'туризм', 'гостиниц', 'hospitality'],
-  agrotourism: ['agrotourism', 'rural tourism', 'агротуризм', 'сельский туризм', 'tourism'],
-  agro: ['agro', 'agriculture', 'сельхоз', 'агро', 'agrotourism'],
-  export: ['export', 'вэд', 'экспорт'],
-  services: ['services', 'service', 'сервис', 'услуг'],
-  manufacturing: ['manufacturing', 'production', 'fabrication', 'производ'],
-  construction: ['construction', 'строи', 'infrastructure'],
-  education: ['education', 'обучен', 'edtech'],
-  healthcare: ['health', 'medtech', 'healthcare', 'мед'],
-  other: []
-};
-
-const sectorFamily = (sector: string): string[] => [
-  sector,
-  ...(SECTOR_SYNONYMS[sector] ?? [])
-];
-
-const sectorsMatch = (programSector: string, classificationSector: string): boolean => {
-  const programFamily = new Set(sectorFamily(programSector));
-  const classFamily = new Set(sectorFamily(classificationSector));
-  if (programFamily.has(classificationSector) || classFamily.has(programSector)) {
-    return true;
-  }
-  for (const token of classFamily) {
-    if (programFamily.has(token)) {
-      return true;
-    }
-  }
-  return false;
-};
-
-const scoreProgram = (
-  program: SubsidyProgram,
-  classification: SubsidyClassification
-): SubsidyMatchScore | null => {
-  const programSectors = normalizeStrings(program.sectors);
-  const excludes = normalizeStrings(classification.excludeSectors ?? []);
-  if (programSectors.length && excludes.some((sector) => programSectors.includes(sector))) {
-    return null;
-  }
-
-  let score = 0;
-
-  const preferredSectors = normalizeStrings(classification.sectors ?? []);
-  const sectorMatched = preferredSectors.some((clsSector) =>
-    programSectors.some((progSector) => sectorsMatch(progSector, clsSector))
-  );
-
-  const programKeywords = normalizeStrings(program.keywords ?? []);
-  const expandedSectorTokens = preferredSectors.flatMap((sector) => [
-    sector,
-    ...(SECTOR_SYNONYMS[sector] ?? [])
-  ]);
-  const classificationKeywords = Array.from(
-    new Set([
-      ...expandedSectorTokens,
-      ...normalizeStrings(classification.costTypes),
-      ...(classification.notes ? normalizeStrings(classification.notes.split(/\s+/)) : [])
-    ])
-  );
-
-  let keywordMatch = false;
-  if (!sectorMatched) {
-    keywordMatch = classificationKeywords.some((token) => programKeywords.includes(token));
-  }
-
-  const exportAffinity = classification.export === true && Boolean(program.isExport);
-
-  if (!sectorMatched && !keywordMatch && !exportAffinity) {
-    return null;
-  }
-
-  if (sectorMatched) {
-    score += 3;
-  } else if (keywordMatch || exportAffinity) {
-    score += 2;
-  }
-
-  if (classification.costTypes.length > 0) {
-    const costTypes = normalizeStrings(program.costTypes);
-    const desiredCostTypes = normalizeStrings(classification.costTypes);
-    const costIntersection = intersects(costTypes, desiredCostTypes);
-    score += costIntersection.length ? 3 : 0;
-  }
-
-  if (matchesRegion(program.regions, classification.region)) {
-    score += 2;
-  }
-
-  if (program.isExport && classification.export === true) {
-    score += 2;
-  } else if (program.isExport) {
-    score += 1;
-  }
-
-  const budgetRange = resolveBudgetRange(classification);
-  const budgetScore = scoreBudget(program, budgetRange);
-  score += budgetScore;
-
-  if (classification.notes && containsKeywords(classification.notes, program.keywords)) {
-    score += 1;
-  }
-
-  const estimatedAmount = computeEstimatedAmount(program, budgetRange);
-
-  return { program, score, estimatedAmount };
-};
-
-const matchesRegion = (programRegions: string[], region: SubsidyRegion): boolean => {
-  if (region === 'unknown') {
-    return true;
-  }
-  const normalized = mapRegionToProgramCode(region);
-  const regions = normalizeStrings(programRegions);
-  if (
-    !regions.length ||
-    regions.includes('any') ||
-    regions.includes('all') ||
-    regions.includes('nationwide') ||
-    regions.includes('rf') ||
-    regions.includes('other')
-  ) {
-    return true;
-  }
-  if (normalized === 'rf') {
-    return regions.includes('rf') || regions.includes('all');
-  }
-  return regions.includes(normalized);
-};
-
-const scoreBudget = (program: SubsidyProgram, range: BudgetRange): number => {
-  if (!range.min && !range.max && !range.point) {
-    return 1;
-  }
-
-  const minBudget = program.minBudget ?? null;
-  const maxBudget = program.maxBudget ?? null;
-
-  const overlaps = rangesOverlap(range.min, range.max, minBudget, maxBudget);
-  if (overlaps) {
-    return 2;
-  }
-
-  const target = range.point ?? range.max ?? range.min;
-  if (!target || !Number.isFinite(target)) {
-    return 0;
-  }
-
-  if (minBudget && target < minBudget * 0.7) {
-    return -1;
-  }
-  if (maxBudget && target > maxBudget * 1.3) {
-    return 0;
-  }
-  return 1;
-};
-
-const containsKeywords = (notes: string, keywords: string[] = []): boolean => {
-  if (!notes || !keywords.length) {
-    return false;
-  }
-  const normalizedNotes = notes.toLowerCase();
-  return keywords.some((keyword) => normalizedNotes.includes(keyword.toLowerCase()));
-};
-
-export const computeEstimatedAmount = (program: SubsidyProgram, range: BudgetRange): number => {
-  const targetBudget =
-    range.point ??
-    range.max ??
-    range.min ??
-    program.minBudget ??
-    program.maxAmount ??
-    1_000_000;
+export const computeEstimatedAmount = (
+  program: Pick<SubsidyProgram, 'minBudget' | 'maxAmount' | 'coverageRate' | 'maxBudget'>,
+  range: BudgetRange
+): number => {
+  const targetBudget = range.point ?? range.max ?? range.min ?? program.minBudget ?? program.maxAmount ?? 1_000_000;
 
   if (!targetBudget || targetBudget <= 0) {
     return program.maxAmount ?? 0;
@@ -270,52 +63,19 @@ export const computeEstimatedAmount = (program: SubsidyProgram, range: BudgetRan
   return capped;
 };
 
-const normalizeStrings = (values: string[]): string[] =>
-  values
-    .map((value) => value.trim().toLowerCase())
-    .filter(Boolean);
-
-const intersects = (left: string[], right: string[]): string[] => {
-  if (!left.length || !right.length) {
-    return [];
-  }
-  const leftSet = new Set(left.map((item) => item.trim().toLowerCase()));
-  return right
-    .map((item) => item.trim().toLowerCase())
-    .filter((item) => leftSet.has(item));
-};
-
-const toEstimatedProgram = (match: SubsidyMatchScore): EstimatedProgram => ({
-  programCode: match.program.code,
-  title: match.program.title,
-  estimatedAmount: match.estimatedAmount,
-  coveragePercent: match.program.coverageRate
-    ? Math.round((match.program.coverageRate ?? 0) * 100)
-    : undefined,
-  description: (match.program.description ?? '').split('\n')[0]?.trim(),
-  score: match.score
-});
-
-const logProgramMatch = (
-  program: SubsidyProgram,
-  classification: SubsidyClassification,
-  match: SubsidyMatchScore
-): void => {
-  logger.info('subsidy_program_match', {
-    program: {
-      code: program.code,
-      title: program.title,
-      coverageRate: program.coverageRate,
-      maxAmount: program.maxAmount,
-      minBudget: program.minBudget,
-      maxBudget: program.maxBudget,
-      sectors: program.sectors,
-      costTypes: program.costTypes
-    },
-    classification,
+const toEstimatedProgram = (match: SubsidyMatchResult, range: BudgetRange): EstimatedProgram => {
+  const estimatedAmount = computeEstimatedAmount(match.program, range);
+  return {
+    programCode: match.program.code,
+    title: match.program.title,
+    estimatedAmount,
+    coveragePercent: match.program.coverageRate
+      ? Math.round((match.program.coverageRate ?? 0) * 100)
+      : undefined,
+    description: (match.program.description ?? '').split('\n')[0]?.trim(),
     score: match.score,
-    estimatedAmount: match.estimatedAmount
-  });
+    sectors: normalizeProgramSectors(match.program.sectors)
+  };
 };
 
 interface BudgetRange {
@@ -366,18 +126,6 @@ const rangesOverlap = (
   return desiredMax >= progMin && desiredMin <= progMax;
 };
 
-const shouldLogItMoscow = (classification: SubsidyClassification): boolean => {
-  if (!classification.sectors.includes('it')) {
-    return false;
-  }
-  if (classification.region !== 'moscow') {
-    return false;
-  }
-  const range = resolveBudgetRange(classification);
-  const approxBudget = range.point ?? range.max ?? range.min ?? 0;
-  return approxBudget >= 1_000_000 && approxBudget <= 2_000_000;
-};
-
 const mapRegionToProgramCode = (region: SubsidyRegion): string => {
   switch (region) {
     case 'moscow':
@@ -393,4 +141,34 @@ const mapRegionToProgramCode = (region: SubsidyRegion): string => {
     default:
       return '';
   }
+};
+
+const buildMatchContext = (classification: SubsidyClassification): SubsidyMatchContext => {
+  const sector = toCompanySector(classification.sectors?.[0]);
+  const regionCode = mapRegionToProgramCode(classification.region);
+  const budgetRub =
+    (typeof classification.budgetTo === 'number' && classification.budgetTo > 0
+      ? classification.budgetTo
+      : null) ??
+    (typeof classification.budgetFrom === 'number' && classification.budgetFrom > 0
+      ? classification.budgetFrom
+      : null) ??
+    undefined;
+
+  return {
+    sector,
+    regionCode,
+    budgetRub
+  };
+};
+
+const toCompanySector = (sector?: string): CompanySector => {
+  const normalized = (sector ?? '').toLowerCase();
+  if (normalizeProgramSectors([normalized]).includes('it')) return 'it';
+  if (normalizeProgramSectors([normalized]).includes('logistics')) return 'logistics';
+  if (normalizeProgramSectors([normalized]).includes('agro')) return 'agro';
+  if (normalizeProgramSectors([normalized]).includes('tourism')) return 'tourism';
+  if (normalizeProgramSectors([normalized]).includes('finance')) return 'finance';
+  if (normalizeProgramSectors([normalized]).includes('industry')) return 'industry';
+  return 'other';
 };

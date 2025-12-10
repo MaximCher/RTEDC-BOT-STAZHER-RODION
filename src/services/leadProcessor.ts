@@ -3,9 +3,19 @@ import { LeadPayload } from '../types/lead';
 import { logger } from '../utils/logger';
 import { prisma } from './db';
 import { runtimeConfig } from '../config/runtimeConfig';
-import { sendLeadToBitrix } from './bitrixClient';
+import { sendLeadToBitrix, BitrixLeadResult } from './bitrixClient';
 
-export const processLead = async (lead: LeadPayload): Promise<void> => {
+interface ProcessLeadOptions {
+  comments?: string;
+  title?: string;
+  telegramUsername?: string;
+  lastName?: string;
+}
+
+export const processLead = async (
+  lead: LeadPayload & { telegramUsername?: string },
+  options?: ProcessLeadOptions
+): Promise<BitrixLeadResult> => {
   logger.info('Processing lead payload', { lead });
 
   let prismaRecord: { id: number } | null = null;
@@ -26,11 +36,17 @@ export const processLead = async (lead: LeadPayload): Promise<void> => {
     logger.error('Failed to persist lead', { error });
   }
 
+  let bitrixResult: BitrixLeadResult = { success: false };
   if (runtimeConfig.bitrixWebhookUrl) {
     try {
-      const bitrixResult = await sendLeadToBitrix(
+      bitrixResult = await sendLeadToBitrix(
         lead,
-        prismaRecord ? { dbId: prismaRecord.id } : undefined
+        {
+          ...(prismaRecord ? { dbId: prismaRecord.id } : {}),
+          comments: options?.comments,
+          title: options?.title,
+          lastName: options?.lastName
+        }
       );
       if (!bitrixResult.success) {
         logger.error('bitrix_lead_failed', { error: bitrixResult.error, lead });
@@ -46,4 +62,5 @@ export const processLead = async (lead: LeadPayload): Promise<void> => {
       logger.error('bitrix_lead_exception', { error, lead });
     }
   }
+  return bitrixResult;
 };

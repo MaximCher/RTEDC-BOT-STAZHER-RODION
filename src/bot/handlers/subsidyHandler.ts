@@ -14,6 +14,8 @@ import type {
 } from '../../types/subsidy';
 import { splitToTelegramChunks } from '../../utils/text';
 import { mainMenuKeyboard } from '../keyboards/mainMenu';
+import { detectCompanySectorFromText } from '../../services/subsidies/companyProfile';
+import type { CompanySector } from '../../services/subsidies/companyProfile';
 
 export const registerSubsidyHandlers = (bot: Telegraf<CustomContext>) => {
   bot.action(
@@ -128,8 +130,7 @@ export const handleSubsidySolutionText = async (ctx: CustomContext): Promise<boo
           )
         : messages.subsidyManualEstimate;
 
-    const introLine = stillNeedDetails && readyDespiteNeed ? messages.subsidyApproxEstimateIntro : assistantReply;
-    const finalText = [introLine, '', estimationText].filter(Boolean).join('\n');
+    const finalText = estimationText;
 
     state.dialog.push({ role: 'assistant', text: finalText, ts: new Date().toISOString() });
     ctx.session.subsidy = state;
@@ -289,12 +290,38 @@ const sendChunkedReplies = async (
   }
 };
 
+const mapCompanySectorToSubsidySector = (sector: CompanySector): SubsidySector => {
+  switch (sector) {
+    case 'it':
+      return 'it';
+    case 'logistics':
+      return 'logistics';
+    case 'agro':
+      return 'agro';
+    case 'tourism':
+      return 'tourism';
+    case 'industry':
+      return 'manufacturing';
+    case 'finance':
+      return 'services';
+    default:
+      return 'other';
+  }
+};
+
 const applyTextHeuristics = (
   classification: SubsidyClassification,
   text: string
 ): SubsidyClassification => {
   const hints = inferClassificationHints(text);
+  const detectedSector = detectCompanySectorFromText(text);
   if (!hints) {
+    if (!classification.sectors.length && detectedSector) {
+      return {
+        ...classification,
+        sectors: [mapCompanySectorToSubsidySector(detectedSector)]
+      };
+    }
     return classification;
   }
 
@@ -326,6 +353,11 @@ const applyTextHeuristics = (
   }
   if (!hasBudgetTo && typeof hints.budgetTo === 'number') {
     next.budgetTo = hints.budgetTo;
+    changed = true;
+  }
+
+  if (!next.sectors.length && detectedSector) {
+    next.sectors = [mapCompanySectorToSubsidySector(detectedSector)];
     changed = true;
   }
 

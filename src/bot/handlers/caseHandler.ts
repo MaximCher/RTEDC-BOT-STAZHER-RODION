@@ -10,9 +10,10 @@ import {
   KnowledgeDirection,
   getRelevantKnowledge
 } from '../../services/knowledgeBase';
-import { nextSolutionStep } from '../../services/aiAssistant';
+import { nextSolutionStep, buildAiContextFromSupabase } from '../../services/aiAssistant';
 import { resetFlow, SolutionState } from '../../types/session';
 import { solutionStepKeyboard } from '../keyboards/solution';
+import { splitToTelegramChunks } from '../../utils/text';
 
 const directionToKnowledge: Record<Direction, KnowledgeDirection> = {
   finance: 'finance',
@@ -55,7 +56,8 @@ export const handleSolutionText = async (ctx: CustomContext): Promise<boolean> =
   }
 
   if (isOffTopic(rawText)) {
-    await ctx.reply(
+    await sendChunkedReplies(
+      ctx,
       `${messages.solutionOffTopicShort}\n\n${messages.solutionOffTopicAsk}`,
       solutionStepKeyboard(false)
     );
@@ -72,7 +74,7 @@ export const handleSolutionText = async (ctx: CustomContext): Promise<boolean> =
     const reminder = [messages.solutionAfterReady, '', messages.solutionWaitingInfo]
       .filter(Boolean)
       .join('\n');
-    await ctx.reply(reminder, solutionStepKeyboard(true));
+    await sendChunkedReplies(ctx, reminder, solutionStepKeyboard(true));
     return true;
   }
 
@@ -81,8 +83,13 @@ export const handleSolutionText = async (ctx: CustomContext): Promise<boolean> =
     : undefined;
   const kbInput = aggregateUserDialog(solution) || rawText;
   const kbSelection = await getRelevantKnowledge(kbInput, knowledgeDirection);
+  const supabaseContext = await buildAiContextFromSupabase(rawText);
 
-  const stepResult = await nextSolutionStep(solution.dialog, kbSelection?.context ?? null);
+  const stepResult = await nextSolutionStep(
+    solution.dialog,
+    kbSelection?.context ?? null,
+    supabaseContext.externalContext ?? null
+  );
 
   solution.dialog.push({
     role: 'assistant',
@@ -100,8 +107,10 @@ export const handleSolutionText = async (ctx: CustomContext): Promise<boolean> =
     direction: stepResult.direction,
     summary: stepResult.managerSummary ?? '',
     advice: stepResult.botMessage,
-    sources: kbSelection?.articles ?? [],
-    kbUsed: Boolean(kbSelection?.context)
+    sources: Array.from(
+      new Set([...(kbSelection?.articles ?? []), ...(supabaseContext.externalSources ?? [])])
+    ),
+    kbUsed: Boolean(kbSelection?.context || supabaseContext.externalContext)
   };
 
   if (ctx.from?.id) {
@@ -131,7 +140,7 @@ export const handleSolutionText = async (ctx: CustomContext): Promise<boolean> =
     replyText = [replyText, '', messages.solutionTransferHint].filter(Boolean).join('\n');
   }
 
-  await ctx.reply(replyText, solutionStepKeyboard(stepResult.aiReady));
+  await sendChunkedReplies(ctx, replyText, solutionStepKeyboard(stepResult.aiReady));
   return true;
 };
 
@@ -171,6 +180,18 @@ const extractMessageText = (ctx: CustomContext): string | undefined => {
     return payload.text?.trim();
   }
   return undefined;
+};
+
+const sendChunkedReplies = async (
+  ctx: CustomContext,
+  text: string,
+  keyboard: ReturnType<typeof solutionStepKeyboard>
+): Promise<void> => {
+  const chunks = splitToTelegramChunks(text);
+  for (let i = 0; i < chunks.length; i += 1) {
+    const chunkKeyboard = i === chunks.length - 1 ? keyboard : undefined;
+    await ctx.reply(chunks[i], chunkKeyboard);
+  }
 };
 
 

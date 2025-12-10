@@ -87,6 +87,7 @@ export interface SessionData {
   subsidy?: SubsidySolutionState;
   serviceDialog?: ServiceDialogState;
   lastCase?: CaseInsight;
+  lastLeadId?: number;
 }
 
 export const initialSessionState = (): SessionData => ({

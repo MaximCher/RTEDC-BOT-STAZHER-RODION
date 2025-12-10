@@ -4,17 +4,19 @@ import { Direction, LeadPayload, ConversationMetadata } from '../../types/lead';
 import { messages, formatLeadForManager } from '../messages';
 import { backToMenuKeyboard, leadConfirmKeyboard } from '../keyboards/lead';
 import { processLead } from '../../services/leadProcessor';
-import { runtimeConfig } from '../../config/runtimeConfig';
 import { logger } from '../../utils/logger';
+import { runtimeConfig } from '../../config/runtimeConfig';
 import {
   initialSessionState,
   resetFlow,
   SolutionState,
-  SubsidySolutionState
+  SubsidySolutionState,
+  SolutionDialogTurn
 } from '../../types/session';
-import { isValidContact } from '../../services/validation';
 import { calculateLeadScoreDetails } from '../../services/leadScoring';
 import { withCallbackGuard } from '../../utils/callbackGuard';
+import { isValidContact } from '../../services/validation';
+import { serviceCategoryToDirection } from '../../config/servicePlaybook';
 
 interface LeadFormOptions {
   scenario: string;
@@ -25,39 +27,10 @@ interface LeadFormOptions {
 
 export const registerLeadHandlers = (bot: Telegraf<CustomContext>) => {
   bot.action(
-    'srvt:lead:restart:form',
-    withCallbackGuard(async (ctx) => {
-      await ctx.reply('Запускаю форму заново 👇');
-      const current = ctx.session.leadForm;
-      if (!current) {
-        return;
-      }
-      await startLeadForm(ctx, {
-        scenario: current.scenario,
-        direction: current.direction,
-        metadata: current.metadata,
-        introMessage: current.introMessage
-      });
-    })
-  );
-
-  bot.action(
     /^srvt:lead:start:(?<slug>[a-z_]+)/,
     withCallbackGuard(async (ctx) => {
       const slug = ctx.match?.groups?.slug ?? '';
-      const options = resolveLeadOptions(ctx, slug);
-      if (!options) {
-        await ctx.reply(messages.leadDataMissing);
-        return;
-      }
-      await startLeadForm(ctx, options);
-    })
-  );
-
-  bot.action(
-    'srvt:lead:submit:confirm',
-    withCallbackGuard(async (ctx) => {
-      await submitLead(ctx);
+      await submitLeadImmediate(ctx, slug);
     })
   );
 };
@@ -278,6 +251,25 @@ const resolveLeadOptions = (
     };
   }
 
+  if (slug.startsWith('service_')) {
+    const serviceState = ctx.session.serviceDialog;
+    return {
+      scenario: slug,
+      direction: serviceState?.category ? serviceCategoryToDirection(serviceState.category) : 'other',
+      metadata: {
+        serviceCategory: serviceState?.category,
+        serviceDialog: serviceState?.dialog?.slice(-10),
+        serviceTurnCount: serviceState?.turnCount,
+        serviceType: serviceState?.managerLabel,
+        serviceOffer: serviceState?.offer,
+        serviceDescription: serviceState?.description,
+        serviceClarifyQuestion: serviceState?.clarifyQuestion,
+        serviceFirstInput: serviceState?.firstInput,
+        serviceClarification: serviceState?.clarification
+      }
+    };
+  }
+
   return null;
 };
 
@@ -443,5 +435,154 @@ const extractScoreFromMetadata = (
     }
   }
   return undefined;
+};
+
+export const submitLeadImmediate = async (ctx: CustomContext, slug: string): Promise<void> => {
+  const tgId = ctx.from?.id;
+  if (!tgId) {
+    await ctx.reply(messages.technicalIssue);
+    return;
+  }
+  const options = resolveLeadOptions(ctx, slug);
+  if (!options) {
+    await ctx.reply(messages.leadDataMissing);
+    return;
+  }
+  const { leadPayload, comments, title } = buildLeadPayload(ctx, options);
+
+  const result = await processLead(leadPayload, {
+    comments,
+    title,
+    telegramUsername: ctx.from?.username,
+    lastName: ctx.from?.last_name
+  });
+
+  if (!result.success) {
+    await ctx.reply(messages.technicalIssue, backToMenuKeyboard());
+    return;
+  }
+
+  ctx.session.lastLeadId = result.leadId;
+  await ctx.reply(
+    'Спасибо за обращение! Мы передали вашу заявку специалистам СРВТ. Они свяжутся с вами в ближайшее время.',
+    backToMenuKeyboard()
+  );
+  ctx.setSession(initialSessionState());
+};
+
+const buildLeadPayload = (
+  ctx: CustomContext,
+  options: LeadFormOptions
+): {
+  leadPayload: LeadPayload & { telegramUsername?: string };
+  comments: string;
+  title: string;
+} => {
+  const tgId = ctx.from?.id ?? 0;
+  const tgUsername = ctx.from?.username ?? '';
+  const tgFirstName = ctx.from?.first_name ?? '';
+  const tgLastName = ctx.from?.last_name ?? '';
+
+  const solutionState = ctx.session.solution;
+  const subsidyState = ctx.session.subsidy;
+  const normalizedMetadata = normalizeMetadata(options.metadata);
+  const solutionMetadata = buildSolutionMetadata(solutionState);
+  const subsidyMetadata = buildSubsidyMetadata(subsidyState);
+  const combinedMetadata = mergeMetadata(
+    mergeMetadata(normalizedMetadata, solutionMetadata),
+    subsidyMetadata
+  );
+
+  const caseSummary = buildCaseSummary(ctx);
+  const caseType = resolveCaseType(options.scenario);
+
+  const comments = [
+    'Источник: Telegram-бот SRVT Assistant',
+    `Тип обращения: ${caseType}`,
+    '',
+    'Резюме кейса:',
+    caseSummary || '—',
+    '',
+    'Telegram:',
+    `- ID: ${tgId}`,
+    `- Username: @${tgUsername || 'нет'}`,
+    `- Имя: ${tgFirstName} ${tgLastName}`.trim(),
+    '',
+    'История диалога:',
+    formatDialogExcerpt(solutionState, subsidyState, ctx.session.serviceDialog)
+  ].join('\n');
+
+  const lead: LeadPayload & { telegramUsername?: string } = {
+    source: 'srvt_bot',
+    scenario: options.scenario,
+    direction: options.direction,
+    name: tgFirstName || 'Telegram',
+    phone: '',
+    company: undefined,
+    userId: tgId,
+    metadata: combinedMetadata,
+    telegramUsername: tgUsername
+  };
+
+  const title = `[SRVT Bot] ${caseType} — Telegram #${tgId}`;
+
+  return { leadPayload: lead, comments, title };
+};
+
+const resolveCaseType = (scenario: string): string => {
+  if (scenario === 'subsidy_application' || scenario === 'subsidy_ai') {
+    return 'Субсидии и меры поддержки';
+  }
+  if (scenario.startsWith('service_')) {
+    return 'Услуги СРВТ';
+  }
+  if (scenario === 'solution_case' || scenario === 'solution') {
+    return 'Подбор решения';
+  }
+  if (scenario === 'manager_contact') {
+    return 'Связаться с экспертом';
+  }
+  return 'Обращение';
+};
+
+const buildCaseSummary = (ctx: CustomContext): string => {
+  if (ctx.session.lastCase?.summary) {
+    return ctx.session.lastCase.summary;
+  }
+  if (ctx.session.solution?.managerSummary) {
+    return ctx.session.solution.managerSummary;
+  }
+  if (ctx.session.subsidy?.classification) {
+    const cls = ctx.session.subsidy.classification;
+    const budget =
+      (cls.budgetFrom && cls.budgetTo && cls.budgetFrom === cls.budgetTo
+        ? cls.budgetFrom
+        : cls.budgetTo ?? cls.budgetFrom) ?? null;
+    const budgetText = budget ? `${budget.toLocaleString('ru-RU')} ₽` : 'не указан';
+    const sectorText = cls.sectors?.length ? cls.sectors.join(', ') : '—';
+    return `Запрос на субсидии: сектор ${sectorText}, регион ${cls.region}, бюджет ${budgetText}`;
+  }
+  if (ctx.session.serviceDialog) {
+    const svc = ctx.session.serviceDialog;
+    return `Услуги СРВТ: ${svc.managerLabel}. Запрос: ${svc.firstInput ?? svc.clarification ?? 'не указан'}`;
+  }
+  return 'Описание не указано';
+};
+
+const formatDialogExcerpt = (
+  solution?: SolutionState,
+  subsidy?: SubsidySolutionState,
+  service?: { dialog?: SolutionDialogTurn[] }
+): string => {
+  if (solution?.dialog?.length) {
+    return solution.dialog.slice(-5).map((d) => `${d.role}: ${d.text}`).join('\n');
+  }
+  if (subsidy?.dialog?.length) {
+    return subsidy.dialog.slice(-5).map((d) => `${d.role}: ${d.text}`).join('\n');
+  }
+  if (service?.dialog?.length) {
+    return service.dialog.slice(-5).map((d) => `${d.role}: ${d.text}`).join('\n');
+  }
+  return '—';
 };
 

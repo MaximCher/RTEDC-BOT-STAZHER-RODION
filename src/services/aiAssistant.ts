@@ -13,6 +13,7 @@ import type {
 import { messages } from '../bot/messages';
 import { ServiceCategory } from '../types/service';
 import { SERVICE_PLAYBOOK, ServicePlaybookEntry } from '../config/servicePlaybook';
+import { searchSrvtRag } from './vectorSearch';
 
 export type AiDirection = Direction;
 
@@ -59,6 +60,8 @@ export interface AiContextOptions {
   direction?: KnowledgeDirection;
   kbContext?: string | null;
   kbArticles?: string[];
+  externalContext?: string | null;
+  externalSources?: string[];
 }
 
 const SOLUTION_PROMPT = `
@@ -278,6 +281,27 @@ const buildMessages = (
     systemBlocks.push(`KB_CONTEXT:\n${options.kbContext}`);
   }
 
+  if (options.externalContext) {
+    systemBlocks.push(
+      [
+        'Используй приведённый ниже контекст с сайта SRVT строго как базу знаний.',
+        'Не выдумывай дополнительные услуги и факты, которых нет в контексте.',
+        'Отвечай в стилистике SRVT, опираясь на реальные формулировки и форматы работы компании.',
+        '',
+        'Если контекст содержит информацию, связанную с вопросом пользователя, — используй её в первую очередь.',
+        'Если информации недостаточно, давай общий ответ, но не придумывай детали о SRVT.',
+        '',
+        'Приоритет источников:',
+        '1) Контекст SRVT ниже;',
+        '2) Логика диалога (предыдущие сообщения);',
+        '3) Общие знания модели.',
+        '',
+        'КОНТЕКСТ SRVT:',
+        options.externalContext
+      ].join('\n')
+    );
+  }
+
   const systemContent = systemBlocks.join('\n\n');
 
   return [
@@ -288,14 +312,15 @@ const buildMessages = (
 
 export const nextSolutionStep = async (
   dialog: SolutionDialogTurn[],
-  kbContext: string | null
+  kbContext: string | null,
+  externalContext: string | null = null
 ): Promise<SolutionStepResult> => {
   if (!openaiClient) {
     return fallbackSolutionStep();
   }
 
   try {
-    const messagesPayload = buildSolutionMessages(dialog, kbContext);
+    const messagesPayload = buildSolutionMessages(dialog, kbContext, externalContext);
     const response = await openaiClient.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: messagesPayload,
@@ -388,7 +413,8 @@ export const nextSubsidyClassificationStep = async (
 
 export const nextServiceConsultationStep = async (
   category: ServiceCategory,
-  dialog: SolutionDialogTurn[]
+  dialog: SolutionDialogTurn[],
+  externalContext: string | null = null
 ): Promise<ServiceConsultationStepResult> => {
   const playbook = SERVICE_PLAYBOOK[category];
   if (!playbook) {
@@ -401,9 +427,16 @@ export const nextServiceConsultationStep = async (
     return fallbackServiceStep(playbook);
   }
   try {
-    const prompt = [SERVICE_CONSULT_PROMPT, `Категория: ${playbook.label}.`, playbook.aiPrompt]
-      .filter(Boolean)
-      .join('\n\n');
+    const contextBlocks = [
+      SERVICE_CONSULT_PROMPT,
+      `Категория: ${playbook.label}.`,
+      playbook.aiPrompt
+    ].filter(Boolean);
+    if (externalContext) {
+      contextBlocks.push(`SRVT_WEB_CONTEXT:\n${externalContext}`);
+    }
+    const prompt = contextBlocks.join('\n\n');
+
     const messagesPayload = buildServiceMessages(dialog, prompt);
     const response = await openaiClient.chat.completions.create({
       model: 'gpt-4o-mini',
@@ -432,11 +465,32 @@ export const nextServiceConsultationStep = async (
 
 const buildSolutionMessages = (
   dialog: SolutionDialogTurn[],
-  kbContext: string | null
+  kbContext: string | null,
+  externalContext: string | null
 ): ChatCompletionMessageParam[] => {
   const systemBlocks = [SOLUTION_PROMPT];
   if (kbContext) {
     systemBlocks.push(`KB_CONTEXT:\n${kbContext}`);
+  }
+  if (externalContext) {
+    systemBlocks.push(
+      [
+        'Используй приведённый ниже контекст с сайта SRVT строго как базу знаний.',
+        'Не выдумывай дополнительные услуги и факты, которых нет в контексте.',
+        'Отвечай в стилистике SRVT, опираясь на реальные формулировки и форматы работы компании.',
+        '',
+        'Если контекст содержит информацию, связанную с вопросом пользователя, — используй её в первую очередь.',
+        'Если информации недостаточно, давай общий ответ, но не придумывай детали о SRVT.',
+        '',
+        'Приоритет источников:',
+        '1) Контекст SRVT ниже;',
+        '2) Логика диалога (предыдущие сообщения);',
+        '3) Общие знания модели.',
+        '',
+        'КОНТЕКСТ SRVT:',
+        externalContext
+      ].join('\n')
+    );
   }
 
   const base: ChatCompletionMessageParam[] = [
@@ -817,7 +871,11 @@ const sanitizeBotMessage = (message?: string | null): string | null => {
   if (!trimmed) {
     return null;
   }
-  return trimmed.length > 420 ? `${trimmed.slice(0, 417)}…` : trimmed;
+  if (trimmed.length <= 420) {
+    return trimmed;
+  }
+  const cut = trimmed.lastIndexOf(' ', 420);
+  return (cut === -1 ? trimmed.slice(0, 420) : trimmed.slice(0, cut)).trim();
 };
 
 const sanitizeFollowUpQuestion = (question?: string | null): string | null => {
@@ -825,10 +883,11 @@ const sanitizeFollowUpQuestion = (question?: string | null): string | null => {
   if (!trimmed || trimmed.length < 4) {
     return null;
   }
-  if (trimmed.length > 220) {
-    return `${trimmed.slice(0, 217)}…`;
+  if (trimmed.length <= 220) {
+    return trimmed;
   }
-  return trimmed;
+  const cut = trimmed.lastIndexOf(' ', 220);
+  return (cut === -1 ? trimmed.slice(0, 220) : trimmed.slice(0, cut)).trim();
 };
 
 const clampConfidence = (value?: number): number => {
@@ -882,4 +941,32 @@ const isDirection = (value?: string): value is AiDirection => {
   }
   return ['finance', 'logistics', 'payments', 'analytics', 'other'].includes(value);
 };
+
+export async function buildAiContextFromSupabase(
+  userText: string
+): Promise<Pick<AiContextOptions, 'externalContext' | 'externalSources'>> {
+  const query = userText?.trim();
+  if (!query) {
+    return { externalContext: null, externalSources: [] };
+  }
+
+  const results = await searchSrvtRag(query, { matchCount: 5, minSimilarity: 0.6 });
+  const top = results.slice(0, 8);
+  if (!top.length) {
+    return { externalContext: null, externalSources: [] };
+  }
+
+  const externalContext = top
+    .map((item) => {
+      const url = item.url ?? 'не указан';
+      return `[Источник: ${url}]\n${item.content}`;
+    })
+    .join('\n\n');
+
+  const externalSources = Array.from(
+    new Set(top.map((item) => item.url).filter((url): url is string => Boolean(url)))
+  );
+
+  return { externalContext, externalSources };
+}
 

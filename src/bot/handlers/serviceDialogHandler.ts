@@ -5,7 +5,10 @@ import { SERVICE_PLAYBOOK, isServiceCategory } from '../../config/servicePlayboo
 import { serviceDialogKeyboard } from '../keyboards/services';
 import { splitToTelegramChunks } from '../../utils/text';
 import { messages } from '../messages';
-import { nextServiceConsultationStep } from '../../services/aiAssistant';
+import {
+  nextServiceConsultationStep,
+  buildAiContextFromSupabase
+} from '../../services/aiAssistant';
 
 export const startServiceDialog = async (
   ctx: CustomContext,
@@ -60,7 +63,12 @@ export const handleServiceDialogText = async (ctx: CustomContext): Promise<boole
   }
 
   // AI mini-консультация
-  const aiStep = await nextServiceConsultationStep(state.category, state.dialog);
+  const supaCtx = await buildAiContextFromSupabase(text);
+  const aiStep = await nextServiceConsultationStep(
+    state.category,
+    state.dialog,
+    supaCtx.externalContext ?? null
+  );
   appendTurn(state.dialog, 'assistant', aiStep.botMessage);
 
   // Если данных достаточно — усиливаем CTA
@@ -101,8 +109,8 @@ const sendChunkedReplies = async (
   keyboard: ReturnType<typeof serviceDialogKeyboard>
 ): Promise<void> => {
   const chunks = splitToTelegramChunks(text);
-  for (let i = 0; i < chunks.length; i += 1) {
-    const chunkKeyboard = i === chunks.length - 1 ? keyboard : undefined;
-    await ctx.reply(chunks[i], chunkKeyboard);
+  for (const [index, chunk] of chunks.entries()) {
+    const chunkKeyboard = index === chunks.length - 1 ? keyboard : undefined;
+    await ctx.reply(chunk, chunkKeyboard);
   }
 };
