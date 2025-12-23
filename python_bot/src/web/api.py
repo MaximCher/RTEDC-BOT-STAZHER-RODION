@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.database import get_session_factory
 from src.models.bitrix_lead import BitrixLead
 from src.models.dialog_message import DialogMessage
+from src.models.user_memory import UserMemory
 from src.models.staff import StaffMember
 from src.web.auth import (
     SESSION_COOKIE,
@@ -178,24 +179,54 @@ def register_api(app: FastAPI) -> None:
         dialogs_q = select(func.count(func.distinct(DialogMessage.user_id)))
         messages_q = select(func.count(DialogMessage.id))
         leads_q = select(func.count(BitrixLead.id))
+        leads_by_service_q = select(BitrixLead.service, func.count(BitrixLead.id)).group_by(BitrixLead.service)
+        users_by_service_q = (
+            select(
+                func.coalesce(UserMemory.selected_service, "unknown").label("service"),
+                func.count(func.distinct(DialogMessage.user_id)).label("users"),
+            )
+            .select_from(DialogMessage)
+            .join(UserMemory, UserMemory.user_id == DialogMessage.user_id, isouter=True)
+            .group_by(func.coalesce(UserMemory.selected_service, "unknown"))
+        )
 
         if start_dt is not None:
             dialogs_q = dialogs_q.where(DialogMessage.created_at >= start_dt)
             messages_q = messages_q.where(DialogMessage.created_at >= start_dt)
             leads_q = leads_q.where(BitrixLead.created_at >= start_dt)
+            leads_by_service_q = leads_by_service_q.where(BitrixLead.created_at >= start_dt)
+            users_by_service_q = users_by_service_q.where(DialogMessage.created_at >= start_dt)
         if end_dt is not None:
             dialogs_q = dialogs_q.where(DialogMessage.created_at < end_dt)
             messages_q = messages_q.where(DialogMessage.created_at < end_dt)
             leads_q = leads_q.where(BitrixLead.created_at < end_dt)
+            leads_by_service_q = leads_by_service_q.where(BitrixLead.created_at < end_dt)
+            users_by_service_q = users_by_service_q.where(DialogMessage.created_at < end_dt)
 
         dialogs_total_res = await session.execute(dialogs_q)
         messages_total_res = await session.execute(messages_q)
         leads_total_res = await session.execute(leads_q)
+        leads_by_service_res = await session.execute(leads_by_service_q)
+        users_by_service_res = await session.execute(users_by_service_q)
+
+        dialogs_total = int(dialogs_total_res.scalar() or 0)
+        leads_total = int(leads_total_res.scalar() or 0)
+        conversion = (float(leads_total) / float(dialogs_total)) if dialogs_total else 0.0
+
+        leads_by_service = {
+            str(service or "unknown"): int(cnt or 0) for service, cnt in leads_by_service_res.all()
+        }
+        users_by_service = {
+            str(service or "unknown"): int(cnt or 0) for service, cnt in users_by_service_res.all()
+        }
 
         return {
-            "dialogs_total": int(dialogs_total_res.scalar() or 0),
+            "dialogs_total": dialogs_total,
             "messages_total": int(messages_total_res.scalar() or 0),
-            "leads_total": int(leads_total_res.scalar() or 0),
+            "leads_total": leads_total,
+            "conversion_rate": round(conversion, 4),
+            "leads_by_service": leads_by_service,
+            "users_by_service": users_by_service,
         }
 
     @app.get("/api/export.csv")

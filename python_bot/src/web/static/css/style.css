@@ -126,6 +126,38 @@ button.secondary:hover {
   margin: 10px 0 18px;
 }
 
+.stat.wide {
+  grid-column: span 3;
+}
+
+.kv {
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.kv-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.kv-row:first-child {
+  border-top: none;
+}
+
+.kv-row .k {
+  color: var(--muted);
+}
+
+.kv-row .v {
+  font-weight: 800;
+}
+
 .stat {
   background: var(--card);
   border: 1px solid var(--border);

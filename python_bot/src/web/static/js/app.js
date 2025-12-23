@@ -70,6 +70,23 @@ async function loadStats() {
   const q = getDatesQuery();
   const stats = await api(`/api/statistics${q}`);
   const container = qs("stats");
+  const convPct = (Number(stats.conversion_rate || 0) * 100).toFixed(2);
+  const leadsByService = stats.leads_by_service || {};
+  const usersByService = stats.users_by_service || {};
+
+  const renderKvList = (obj) => {
+    const entries = Object.entries(obj || {});
+    if (!entries.length) return `<div class="muted">—</div>`;
+    return `
+      <div class="kv">
+        ${entries
+          .sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0))
+          .map(([k, v]) => `<div class="kv-row"><div class="k">${escapeHtml(k)}</div><div class="v">${escapeHtml(String(v))}</div></div>`)
+          .join("")}
+      </div>
+    `;
+  };
+
   container.innerHTML = `
     <div class="stat">
       <div class="label">Уникальные пользователи</div>
@@ -82,6 +99,18 @@ async function loadStats() {
     <div class="stat">
       <div class="label">Лиды (Bitrix log)</div>
       <div class="value">${stats.leads_total}</div>
+    </div>
+    <div class="stat">
+      <div class="label">Конверсия в лид</div>
+      <div class="value">${convPct}%</div>
+    </div>
+    <div class="stat wide">
+      <div class="label">Пользователи по услугам</div>
+      ${renderKvList(usersByService)}
+    </div>
+    <div class="stat wide">
+      <div class="label">Лиды по услугам</div>
+      ${renderKvList(leadsByService)}
     </div>
   `;
 }
@@ -199,138 +228,3 @@ function escapeHtml(text) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
-
-function byId(id) {
-  return document.getElementById(id);
-}
-
-function formatDate(value) {
-  try {
-    const d = new Date(value);
-    return d.toLocaleString("ru-RU");
-  } catch {
-    return String(value);
-  }
-}
-
-function getDateFilters() {
-  const start = byId("start-date")?.value || "";
-  const end = byId("end-date")?.value || "";
-  const params = new URLSearchParams();
-  if (start) params.set("start_date", start);
-  if (end) params.set("end_date", end);
-  return params.toString();
-}
-
-async function login() {
-  const password = byId("password-input").value;
-  byId("login-error").textContent = "";
-
-  const res = await fetch("/api/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ password }),
-  });
-
-  if (!res.ok) {
-    byId("login-error").textContent = "Неверный пароль";
-    return;
-  }
-
-  byId("login-screen").style.display = "none";
-  byId("main-panel").style.display = "block";
-  await reloadAll();
-}
-
-async function logout() {
-  await fetch("/api/logout", { method: "POST" });
-  byId("main-panel").style.display = "none";
-  byId("conversation-view").style.display = "none";
-  byId("login-screen").style.display = "block";
-}
-
-async function reloadAll() {
-  await loadStats();
-  await loadUsers();
-}
-
-async function loadStats() {
-  const res = await fetch("/api/statistics");
-  if (!res.ok) return;
-  const data = await res.json();
-  byId("dialogs-today").textContent = data.dialogs_today;
-  byId("dialogs-total").textContent = data.dialogs_total;
-  byId("leads-today").textContent = data.leads_today;
-  byId("leads-total").textContent = data.leads_total;
-}
-
-async function loadUsers() {
-  const query = getDateFilters();
-  const res = await fetch("/api/users" + (query ? `?${query}` : ""));
-  if (!res.ok) return;
-  const data = await res.json();
-  renderUsers(data.users || []);
-}
-
-function renderUsers(users) {
-  const container = byId("users-list");
-  container.innerHTML = users
-    .map((u) => {
-      const title = u.full_name || `Пользователь ${u.user_id}`;
-      const meta = [
-        u.phone ? `📞 ${u.phone}` : null,
-        u.username ? `@${u.username}` : null,
-        `${u.message_count} сообщений`,
-        `последнее: ${formatDate(u.last_message_at)}`,
-      ]
-        .filter(Boolean)
-        .join(" · ");
-      return `
-        <div class="user-card" onclick="openConversation(${u.user_id})">
-          <div><strong>${escapeHtml(title)}</strong></div>
-          <div class="user-meta">${escapeHtml(meta)}</div>
-        </div>
-      `;
-    })
-    .join("");
-}
-
-async function openConversation(userId) {
-  const res = await fetch(`/api/conversation/${userId}?limit=400`);
-  if (!res.ok) return;
-  const data = await res.json();
-  const messages = data.messages || [];
-
-  byId("conversation-view").style.display = "block";
-  byId("conversation-title").textContent = `Диалог: ${userId}`;
-
-  byId("messages").innerHTML = messages
-    .map((m) => {
-      const who = m.role === "user" ? "Клиент" : m.role === "assistant" ? "Бот" : m.role;
-      return `
-        <div class="message ${escapeHtml(m.role)}">
-          <div class="message-header">
-            <strong>${escapeHtml(who)}</strong>
-            <span>${escapeHtml(formatDate(m.created_at))}</span>
-          </div>
-          <div class="message-text">${escapeHtml(m.message_text)}</div>
-        </div>
-      `;
-    })
-    .join("");
-}
-
-function backToUsers() {
-  byId("conversation-view").style.display = "none";
-}
-
-function escapeHtml(text) {
-  return String(text)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-
