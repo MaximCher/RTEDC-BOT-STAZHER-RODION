@@ -1,0 +1,26 @@
+aiogram==3.3.0
+aiohttp==3.9.1
+
+# Database
+asyncpg==0.29.0
+SQLAlchemy==2.0.23
+pgvector==0.2.4
+
+# OpenAI
+openai==1.6.1
+
+# Environment & Config
+python-dotenv==1.0.0
+pydantic==2.5.2
+pydantic-settings==2.1.0
+
+# Logging
+structlog==23.2.0
+colorama==0.4.6
+
+# Utilities
+httpx==0.25.2
+
+# RAG ingest
+pdfplumber==0.10.3
+

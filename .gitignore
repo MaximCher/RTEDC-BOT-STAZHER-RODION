@@ -4,5 +4,20 @@ dist
 .DS_Store
 *.log
 
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+.env.*
+
+# Local data
+python_bot/.env
+python_bot/data/
+
 
 
