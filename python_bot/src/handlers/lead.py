@@ -1,0 +1,117 @@
+from __future__ import annotations
+
+import re
+from typing import Optional, Tuple
+
+from aiogram import F, Router
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import CallbackQuery, Message
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.bitrix import BitrixClient
+from src.models.bitrix_lead import BitrixLead
+from src.models.dialog_message import DialogMessage
+from src.models.user_memory import UserMemory
+from src.utils.keyboards import services_keyboard
+from src.utils.messages import msg
+
+
+router = Router()
+
+
+class LeadForm(StatesGroup):
+    waiting_for_contact_data = State()
+
+
+@router.callback_query(F.data.startswith("lead:start:"))
+async def lead_start(callback: CallbackQuery, state: FSMContext) -> None:
+    service_key = (callback.data or "").split("lead:start:", 1)[-1].strip()
+    await state.set_state(LeadForm.waiting_for_contact_data)
+    await state.update_data(service_key=service_key)
+    await callback.message.answer(msg("lead_contact_request"))
+    await callback.answer()
+
+
+@router.message(LeadForm.waiting_for_contact_data)
+async def lead_process_contact(
+    message: Message, state: FSMContext, session: AsyncSession
+) -> None:
+    text = (message.text or "").strip()
+    if not text:
+        return
+
+    data = await state.get_data()
+    service_key = data.get("service_key")
+    if not isinstance(service_key, str):
+        await message.answer(msg("unknown_service"), reply_markup=services_keyboard())
+        await state.clear()
+        return
+
+    full_name, phone = parse_contact_data(text)
+    if not phone:
+        await message.answer("Не вижу телефон. Пришлите, пожалуйста, в формате: Иванов Иван +79991234567")
+        return
+
+    user_id = message.from_user.id
+    username = message.from_user.username
+
+    # Pull questionnaire summary if exists
+    questionnaire_summary = data.get("questionnaire_summary")
+    summary_text = questionnaire_summary if isinstance(questionnaire_summary, str) else ""
+
+    # Persist contact
+    await UserMemory.update_user_data(session, user_id, full_name=full_name, phone=phone)
+
+    await DialogMessage.create(
+        session,
+        user_id=user_id,
+        username=username,
+        full_name=full_name,
+        phone=phone,
+        message_text=text,
+        role="user",
+        chat_id=message.chat.id,
+        message_id=message.message_id,
+    )
+
+    bitrix = BitrixClient()
+    result = await bitrix.create_lead(
+        full_name=full_name or f"Telegram {user_id}",
+        phone=phone,
+        service_key=service_key,
+        comment=summary_text,
+        user_id=user_id,
+        username=username,
+    )
+
+    if result.get("success"):
+        lead_id = int(result["lead_id"])
+        await BitrixLead.create(
+            session,
+            lead_id=lead_id,
+            user_id=user_id,
+            full_name=full_name,
+            phone=phone,
+            service=service_key,
+        )
+
+    await message.answer(msg("lead_received"), reply_markup=services_keyboard())
+    await state.clear()
+
+
+PHONE_RE = re.compile(r"(\+?\d[\d\s\-\(\)]{7,}\d)")
+
+
+def parse_contact_data(text: str) -> Tuple[str, Optional[str]]:
+    phone_match = PHONE_RE.search(text)
+    if not phone_match:
+        return text.strip()[:200], None
+    phone_raw = phone_match.group(1)
+    phone = re.sub(r"[^\d+]", "", phone_raw)
+    name = (text.replace(phone_raw, "")).strip()
+    if not name:
+        name = "Не указано"
+    return name[:200], phone[:32]
+
+

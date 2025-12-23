@@ -1,0 +1,81 @@
+from __future__ import annotations
+
+from typing import AsyncGenerator, Optional
+
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.orm import declarative_base
+from sqlalchemy.pool import NullPool
+from src.logger import logger
+
+from src.config import settings
+
+Base = declarative_base()
+
+_engine: Optional[AsyncEngine] = None
+_session_factory: Optional[async_sessionmaker[AsyncSession]] = None
+
+
+def get_engine() -> AsyncEngine:
+    if _engine is None:
+        raise RuntimeError("Database engine is not initialized. Call init_db() first.")
+    return _engine
+
+
+def get_session_factory() -> async_sessionmaker[AsyncSession]:
+    if _session_factory is None:
+        raise RuntimeError("DB session factory not initialized. Call init_db() first.")
+    return _session_factory
+
+
+async def init_db() -> None:
+    """Initialize engine and create tables."""
+    global _engine, _session_factory
+
+    _engine = create_async_engine(
+        settings.database_url,
+        echo=settings.debug_mode,
+        poolclass=NullPool,
+        pool_pre_ping=True,
+    )
+    _session_factory = async_sessionmaker(
+        _engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    # Import models so metadata is populated
+    from src import models  # noqa: F401
+
+    async with _engine.begin() as conn:
+        # tables
+        await conn.run_sync(Base.metadata.create_all)
+
+    logger.info("database_initialized", host=settings.postgres_host, db=settings.postgres_db)
+
+
+async def close_db() -> None:
+    global _engine
+    if _engine is not None:
+        await _engine.dispose()
+        _engine = None
+
+
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
+    if _session_factory is None:
+        raise RuntimeError("DB session factory not initialized. Call init_db() first.")
+
+    async with _session_factory() as session:
+        try:
+            yield session
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
+
+
