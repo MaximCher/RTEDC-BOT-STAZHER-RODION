@@ -15,9 +15,12 @@ from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
 from src.utils.keyboards import services_keyboard
 from src.utils.messages import msg
+from src.utils.rate_limit import FixedWindowRateLimiter
 
 
 router = Router()
+
+_lead_rate_limiter = FixedWindowRateLimiter(limit=3, window_sec=60)  # 3 leads/min per user
 
 
 class LeadForm(StatesGroup):
@@ -54,6 +57,9 @@ async def lead_process_contact(
         return
 
     user_id = message.from_user.id
+    if not _lead_rate_limiter.allow(str(user_id)):
+        await message.answer("Слишком много заявок за минуту. Пожалуйста, попробуйте чуть позже.")
+        return
     username = message.from_user.username
 
     # Pull questionnaire summary if exists

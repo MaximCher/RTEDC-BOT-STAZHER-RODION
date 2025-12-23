@@ -1,0 +1,3 @@
+"""FastAPI admin panel package."""
+
+

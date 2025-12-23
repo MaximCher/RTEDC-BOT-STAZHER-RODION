@@ -22,6 +22,38 @@ SRVT_SYSTEM_PROMPT = """
 - Нельзя писать «мы уже передали кейс» — передача происходит после оставления контакта.
 """.strip()
 
+SUBSIDY_SYSTEM_PROMPT = """
+Ты — SRVT Assistant, консультант по субсидиям, грантам и мерам господдержки.
+
+Правила:
+- Отвечай строго по теме субсидий/грантов/льготного финансирования.
+- Если в сообщении клиента нет ключевых вводных (регион/сфера/примерный бюджет/вид затрат) — задай 1–2 уточняющих вопроса.
+- Используй только информацию из блока KB_CONTEXT (если он дан). Не выдумывай меры поддержки.
+- Если в KB_CONTEXT есть проценты и лимиты — можешь опираться на них. Если есть блок CALC_ESTIMATES — используй его как «ориентир расчёта».
+- В конце всегда предлагай: «Если хотите, нажмите “📩 Передать эксперту” — команда СРВТ проверит требования и проведёт по заявке.»
+
+Формат ответа:
+- 3–7 коротких буллетов (без воды)
+- 1 уточняющий вопрос (если нужно)
+""".strip()
+
+SUBSIDY_SYSTEM_PROMPT = """
+Ты — SRVT Assistant, эксперт по субсидиям/грантам/мерам господдержки.
+
+Ключевое:
+- Используй ТОЛЬКО факты из предоставленного RAG-контекста (KB_CONTEXT). Если факта нет в контексте — так и скажи.
+- Если в контексте есть проценты компенсации и лимиты (например «до 80%», «до 300 000 000 руб») — можно сделать предварительную оценку суммы, но всегда с дисклеймером.
+- Структура ответа:
+  1) Коротко: что может подойти из мер поддержки (1–3 пункта)
+  2) Предварительная оценка (если есть бюджет клиента и условия из контекста)
+  3) Что нужно подготовить (документы/условия — только если упомянуто в контексте)
+  4) 1–2 уточняющих вопроса (регион, экспорт, сумма, тип затрат) — если данных мало
+
+Запрещено:
+- Придумывать «конкурс открыт/закрыт», сроки, суммы, проценты, если их нет в контексте.
+- Гарантировать получение субсидии или точную сумму.
+""".strip()
+
 
 LEAD_SUMMARY_PROMPT = """
 Ты — помощник SRVT. Сгенерируй короткое резюме заявки для менеджера.
@@ -55,7 +87,8 @@ class AIAgent:
                 "Нажмите «Передать эксперту», и команда СРВТ свяжется с вами."
             )
 
-        messages: List[Dict[str, str]] = [{"role": "system", "content": SRVT_SYSTEM_PROMPT}]
+        system_prompt = SUBSIDY_SYSTEM_PROMPT if selected_service == "subsidies_financing" else SRVT_SYSTEM_PROMPT
+        messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}]
 
         context_parts: List[str] = []
         if user_name:
@@ -63,7 +96,7 @@ class AIAgent:
         if selected_service:
             context_parts.append(f"Услуга: {SERVICES.get(selected_service, selected_service)}")
         if vector_context:
-            context_parts.append(f"КОНТЕКСТ ИЗ БАЗЫ ЗНАНИЙ (используй, но не выдумывай):\n{vector_context}")
+            context_parts.append(f"KB_CONTEXT:\n{vector_context}")
 
         if context_parts:
             messages.append({"role": "system", "content": "\n\n".join(context_parts)})
@@ -86,6 +119,52 @@ class AIAgent:
             return (resp.choices[0].message.content or "").strip()
         except Exception as e:
             logger.error("openai_generate_answer_failed", error=str(e))
+            return (
+                "Не удалось получить ответ AI из‑за технической ошибки. "
+                "Нажмите «Передать эксперту», и мы подключим специалиста."
+            )
+
+    async def generate_subsidy_answer(
+        self,
+        *,
+        user_message: str,
+        conversation_history: List[Dict[str, Any]],
+        vector_context: Optional[str] = None,
+        calc_estimates: Optional[str] = None,
+    ) -> str:
+        if not self.client:
+            return (
+                "Сейчас AI‑модуль временно недоступен. "
+                "Нажмите «Передать эксперту», и команда СРВТ свяжется с вами."
+            )
+
+        messages: List[Dict[str, str]] = [{"role": "system", "content": SUBSIDY_SYSTEM_PROMPT}]
+
+        system_blocks: List[str] = []
+        if vector_context:
+            system_blocks.append(f"KB_CONTEXT:\n{vector_context}")
+        if calc_estimates:
+            system_blocks.append(f"CALC_ESTIMATES:\n{calc_estimates}")
+        if system_blocks:
+            messages.append({"role": "system", "content": "\n\n".join(system_blocks)})
+
+        for msg in conversation_history[-10:]:
+            role = msg.get("role")
+            content = msg.get("content")
+            if role in {"user", "assistant"} and isinstance(content, str):
+                messages.append({"role": role, "content": content})
+        messages.append({"role": "user", "content": user_message})
+
+        try:
+            resp = await self.client.chat.completions.create(
+                model=settings.openai_model,
+                messages=messages,
+                temperature=0.25,
+                max_tokens=650,
+            )
+            return (resp.choices[0].message.content or "").strip()
+        except Exception as e:
+            logger.error("openai_generate_subsidy_failed", error=str(e))
             return (
                 "Не удалось получить ответ AI из‑за технической ошибки. "
                 "Нажмите «Передать эксперту», и мы подключим специалиста."

@@ -13,6 +13,7 @@ from sqlalchemy.pool import NullPool
 from src.logger import logger
 
 from src.config import settings
+from sqlalchemy import text
 
 Base = declarative_base()
 
@@ -54,8 +55,22 @@ async def init_db() -> None:
     async with _engine.begin() as conn:
         # tables
         await conn.run_sync(Base.metadata.create_all)
+        # Hotfix: bot_id for bot_heartbeat must be bigint (Telegram IDs can exceed int32)
+        try:
+            await conn.execute(text('ALTER TABLE bot_heartbeat ALTER COLUMN bot_id TYPE BIGINT'))
+        except Exception:
+            # table may not exist yet or already correct; ignore
+            pass
 
     logger.info("database_initialized", host=settings.postgres_host, db=settings.postgres_db)
+
+    # Seed staff (admins) from env for first run
+    try:
+        from src.services.staff_service import bootstrap_staff
+        async with _session_factory() as session:  # type: ignore[misc]
+            await bootstrap_staff(session)
+    except Exception as e:
+        logger.error("staff_bootstrap_failed", error=str(e))
 
 
 async def close_db() -> None:

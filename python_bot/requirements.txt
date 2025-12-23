@@ -5,6 +5,7 @@ aiohttp==3.9.1
 asyncpg==0.29.0
 SQLAlchemy==2.0.23
 pgvector==0.2.4
+alembic==1.13.1
 
 # OpenAI
 openai==1.6.1
@@ -23,4 +24,10 @@ httpx==0.25.2
 
 # RAG ingest
 pdfplumber==0.10.3
+
+# Admin panel
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+jinja2==3.1.2
+python-multipart==0.0.6
 

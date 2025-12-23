@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
+        env_ignore_empty=True,
         case_sensitive=False,
         extra="ignore",
     )
@@ -45,9 +46,41 @@ class Settings(BaseSettings):
     log_level: str = Field("INFO", alias="LOG_LEVEL")
     debug_mode: bool = Field(False, alias="DEBUG_MODE")
 
+    # Admin panel
+    admin_password: str = Field("ChangeThisPassword123!", alias="ADMIN_PASSWORD")
+    web_host: str = Field("0.0.0.0", alias="WEB_HOST")
+    web_port: int = Field(8000, alias="WEB_PORT")
+    webapp_public_url: str = Field("https://example.com/admin", alias="WEBAPP_PUBLIC_URL")
+    admin_user_ids: str = Field("", alias="ADMIN_USER_IDS")
+
+    @field_validator("bitrix_responsible_default_id", "bitrix_default_category_id", mode="before")
+    @classmethod
+    def _empty_str_to_none(cls, v: Any) -> Any:
+        if v is None:
+            return None
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
     @property
     def manager_chat_ids_list(self) -> List[int]:
         raw = (self.manager_chat_ids or "").strip()
+        if not raw:
+            return []
+        result: List[int] = []
+        for part in raw.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                result.append(int(part))
+            except ValueError:
+                continue
+        return result
+
+    @property
+    def admin_user_ids_list(self) -> List[int]:
+        raw = (self.admin_user_ids or "").strip()
         if not raw:
             return []
         result: List[int] = []

@@ -1,8 +1,7 @@
-node_modules
-dist
 .env
 .DS_Store
 *.log
+bot.pid
 
 # Python
 __pycache__/

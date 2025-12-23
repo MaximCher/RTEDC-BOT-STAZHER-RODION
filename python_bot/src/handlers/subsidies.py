@@ -5,9 +5,15 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.ai_agent import AIAgent
 from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
+from src.services.subsidy_calc import (
+    estimate_from_context,
+    format_estimates,
+    parse_spend_from_question,
+)
 from src.utils.keyboards import lead_actions_keyboard
 from src.vector_store import VectorStore
 
@@ -59,14 +65,20 @@ async def handle_subsidy_question(
     vector_context = await vector_store.get_context_for_query(text, limit=5, max_context_length=1800)
     history = await UserMemory.get_conversation_history(session, user_id, limit=10)
 
+    calc_text = ""
+    spend = parse_spend_from_question(text)
+    if spend and vector_context:
+        calc_text = format_estimates(estimate_from_context(vector_context, spend_rub=spend, top_k=3))
+
     agent = AIAgent()
-    answer = await agent.generate_answer(
+    answer = await agent.generate_subsidy_answer(
         user_message=text,
         conversation_history=history,
         vector_context=vector_context,
-        user_name=None,
-        selected_service=service_key,
+        calc_estimates=calc_text or None,
     )
+    if not vector_context:
+        answer = f"{answer}\n\n(Примечание: релевантный контекст в базе знаний не найден — ответ общий.)"
 
     await UserMemory.add_message(session, user_id, "assistant", answer)
     await DialogMessage.create(
@@ -82,5 +94,3 @@ async def handle_subsidy_question(
     )
 
     await message.answer(answer, reply_markup=lead_actions_keyboard(service_key))
-
-

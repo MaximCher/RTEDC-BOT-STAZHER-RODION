@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SRVT Admin Panel</title>
+    <link rel="stylesheet" href="/static/css/style.css" />
+  </head>
+  <body>
+    <div id="login-screen" class="card">
+      <h1>SRVT Admin Panel</h1>
+      <p class="muted">История диалогов и статистика</p>
+      <input type="password" id="password-input" placeholder="Пароль" />
+      <button id="login-btn" onclick="login()">Войти</button>
+      <div id="login-error" class="error"></div>
+    </div>
+
+    <div id="main-panel" style="display: none">
+      <header class="header">
+        <div>
+          <div class="title">SRVT — История диалогов</div>
+          <div class="muted">Фильтр по датам влияет на список пользователей и статистику.</div>
+        </div>
+        <div class="header-actions">
+          <button class="secondary" onclick="logout()">Выйти</button>
+        </div>
+      </header>
+
+      <section class="filters">
+        <div class="field">
+          <label>Дата от</label>
+          <input type="date" id="start-date" />
+        </div>
+        <div class="field">
+          <label>Дата до</label>
+          <input type="date" id="end-date" />
+        </div>
+        <div class="field">
+          <label>&nbsp;</label>
+          <button onclick="reloadAll()">Обновить</button>
+        </div>
+      </section>
+
+      <section id="stats" class="stats"></section>
+
+      <section class="staff">
+        <div class="staff-head">
+          <h2>Админы / менеджеры</h2>
+          <div class="muted">Управление доступом к админке и ролями.</div>
+        </div>
+        <div class="staff-form">
+          <input id="staff-tg-id" type="text" placeholder="Telegram user_id (число)" />
+          <select id="staff-role">
+            <option value="admin">admin</option>
+            <option value="manager">manager</option>
+          </select>
+          <button onclick="addStaff()">Добавить</button>
+        </div>
+        <div id="staff-list" class="list"></div>
+      </section>
+
+      <div class="layout">
+        <section class="users">
+          <h2>Пользователи</h2>
+          <div id="users-list" class="list"></div>
+        </section>
+
+        <section class="conversation">
+          <div class="conversation-head">
+            <h2 id="conversation-title">Диалог</h2>
+            <div class="muted" id="conversation-meta"></div>
+          </div>
+          <div id="messages" class="messages"></div>
+        </section>
+      </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+  </body>
+</html>
+
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SRVT Bot — Admin Panel</title>
+    <link rel="stylesheet" href="/static/css/style.css" />
+  </head>
+  <body>
+    <div id="login-screen" class="card">
+      <h1>SRVT Bot Admin</h1>
+      <p class="muted">Введите пароль из <code>ADMIN_PASSWORD</code></p>
+      <input type="password" id="password-input" placeholder="Пароль" />
+      <button id="login-btn" onclick="login()">Войти</button>
+      <div id="login-error" class="error"></div>
+    </div>
+
+    <div id="main-panel" style="display: none">
+      <header class="header">
+        <h1>SRVT — История диалогов</h1>
+        <div class="header-actions">
+          <button class="secondary" onclick="logout()">Выйти</button>
+        </div>
+      </header>
+
+      <section class="filters card">
+        <div class="filter-row">
+          <label>
+            C:
+            <input type="date" id="start-date" />
+          </label>
+          <label>
+            По:
+            <input type="date" id="end-date" />
+          </label>
+          <button class="secondary" onclick="reloadAll()">Применить</button>
+        </div>
+      </section>
+
+      <section id="stats" class="stats">
+        <div class="stat-card">
+          <span class="stat-label">Диалоги сегодня</span>
+          <span class="stat-value" id="dialogs-today">0</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Всего диалогов (уникальные пользователи)</span>
+          <span class="stat-value" id="dialogs-total">0</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Лиды сегодня</span>
+          <span class="stat-value" id="leads-today">0</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Всего лидов</span>
+          <span class="stat-value" id="leads-total">0</span>
+        </div>
+      </section>
+
+      <section class="layout">
+        <div class="card">
+          <h2>Пользователи</h2>
+          <div id="users-list" class="users-list"></div>
+        </div>
+
+        <div id="conversation-view" class="card" style="display: none">
+          <div class="conversation-header">
+            <button class="secondary" onclick="backToUsers()">← Назад</button>
+            <h2 id="conversation-title">Диалог</h2>
+          </div>
+          <div id="messages" class="messages"></div>
+        </div>
+      </section>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+  </body>
+</html>
+
+

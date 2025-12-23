@@ -2,12 +2,12 @@ services:
   db:
     image: ankane/pgvector:latest
     container_name: srvt_db
+    env_file:
+      - .env
     environment:
       POSTGRES_DB: ${POSTGRES_DB-srvt_bot}
       POSTGRES_USER: ${POSTGRES_USER-srvt}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD-ChangeThisToSecurePassword123!}
-    ports:
-      - "5433:5432"
     volumes:
       - srvt_postgres_data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -27,15 +27,11 @@ services:
       - .env
     environment:
       PYTHONPATH: /app
-      # ensures scripts/ can import src.* when executed as files
     depends_on:
       db:
         condition: service_healthy
     volumes:
-      - ./src:/app/src
       - ./data:/app/data
-      - ./alembic:/app/alembic
-      - ./alembic.ini:/app/alembic.ini
     command: python -m src.main
     restart: unless-stopped
 
@@ -51,16 +47,21 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - ./src:/app/src
-      - ./data:/app/data
-      - ./alembic:/app/alembic
-      - ./alembic.ini:/app/alembic.ini
-    ports:
-      - "8000:8000"
     command: python -m src.web_server
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: srvt_nginx
+    depends_on:
+      - web
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     restart: unless-stopped
 
 volumes:
   srvt_postgres_data:
+
 

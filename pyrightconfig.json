@@ -1,0 +1,13 @@
+{
+  "reportMissingImports": false,
+  "reportMissingTypeStubs": false,
+  "typeCheckingMode": "basic",
+  "exclude": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/.venv/**",
+    "**/venv/**"
+  ]
+}
+
+

@@ -3,9 +3,17 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+import sys
+from pathlib import Path
 from typing import Iterable, List
 
 import pdfplumber
+
+# Allow running as `python scripts/ingest_pdf_subsidies.py` inside container:
+# ensure project root is on sys.path so `import src.*` works.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.database import init_db, close_db, get_session_factory
 from src.logger import setup_logging, logger
