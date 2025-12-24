@@ -19,7 +19,14 @@ from src.services.subsidy_calc import (
 )
 from src.utils.messages import msg
 from src.utils.funnel import log_event
-from src.utils.keyboards import flow_nav_keyboard, lead_actions_keyboard, services_keyboard
+from src.config import SERVICE_FLOWS
+from src.utils.keyboards import (
+    flow_nav_keyboard,
+    lead_actions_keyboard,
+    services_keyboard,
+    subsidy_chat_keyboard,
+    subsidies_entry_keyboard,
+)
 from src.utils.ui_flow import format_step, ui_upsert
 from src.vector_store import VectorStore
 
@@ -263,8 +270,39 @@ async def start_subsidy_chat(callback: CallbackQuery, state: FSMContext) -> None
     service_key = (callback.data or "").split("subsidy:chat:start:", 1)[-1].strip()
     await state.set_state(SubsidyChat.waiting_for_question)
     await state.update_data(service_key=service_key)
-    await callback.message.answer(
-        "Ок. Напишите вопрос по субсидиям/мерам поддержки — я подберу релевантные фрагменты из базы знаний и отвечу."
+    await ui_upsert(
+        bot=callback.message.bot,
+        state=state,
+        chat_id=callback.message.chat.id,
+        prefer_message_id=callback.message.message_id,
+        text=format_step(
+            title="SRVT • Вопрос по субсидиям",
+            step=1,
+            total=1,
+            question=(
+                "Напишите вопрос по субсидиям/мерам поддержки — я подберу релевантные фрагменты из базы знаний и отвечу.\n"
+                "Если есть цифры (бюджет/расходы) — добавьте их в вопрос, тогда смогу прикинуть порядок суммы."
+            ),
+        ),
+        reply_markup=flow_nav_keyboard("subsidy:chat:back"),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "subsidy:chat:back")
+async def subsidy_chat_back(callback: CallbackQuery, state: FSMContext) -> None:
+    # Return to subsidies entry screen (within the subsidies service)
+    await state.clear()
+    flow = SERVICE_FLOWS.get("subsidies_financing") or {}
+    text = flow.get("description") or msg("choose_service")
+    await ui_upsert(
+        bot=callback.message.bot,
+        state=state,
+        chat_id=callback.message.chat.id,
+        prefer_message_id=callback.message.message_id,
+        text=text,
+        reply_markup=subsidies_entry_keyboard(),
+        parse_mode=None,
     )
     await callback.answer()
 
@@ -327,4 +365,20 @@ async def handle_subsidy_question(
         message_id=None,
     )
 
-    await message.answer(answer, reply_markup=lead_actions_keyboard(service_key))
+    # Keep "one-screen" UX: render answer in the same editable message.
+    safe_answer = answer.strip()
+    if len(safe_answer) > 3800:
+        safe_answer = safe_answer[:3800].rstrip() + "\n\n(…ответ сокращён)"
+    await ui_upsert(
+        bot=message.bot,
+        state=state,
+        chat_id=message.chat.id,
+        text=(
+            f"<b>SRVT • Вопрос по субсидиям</b>\n\n"
+            f"<b>Вопрос:</b> {text}\n\n"
+            f"<b>Ответ:</b>\n{safe_answer}\n\n"
+            "Можно задать следующий вопрос — просто напишите его."
+        ),
+        reply_markup=subsidy_chat_keyboard(service_key),
+        parse_mode="HTML",
+    )

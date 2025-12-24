@@ -43,7 +43,22 @@ def lead_actions_keyboard(service_key: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             first_row,
-            [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:root")],
+            flow_nav_keyboard().inline_keyboard[0],
+        ]
+    )
+
+
+def subsidy_chat_keyboard(service_key: str) -> InlineKeyboardMarkup:
+    """Keyboard for the 'subsidy question' mode."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📩 Оставить заявку",
+                    callback_data=f"lead:start:{service_key}",
+                )
+            ],
+            flow_nav_keyboard("subsidy:chat:back").inline_keyboard[0],
         ]
     )
 
@@ -76,7 +91,7 @@ def subsidies_entry_keyboard() -> InlineKeyboardMarkup:
                     callback_data="service:questionnaire:subsidies_financing",
                 )
             ],
-            [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:root")],
+            flow_nav_keyboard().inline_keyboard[0],
         ]
     )
 
@@ -96,7 +111,7 @@ def payments_entry_keyboard() -> InlineKeyboardMarkup:
                     callback_data="service:questionnaire:international_payments",
                 )
             ],
-            [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:root")],
+            flow_nav_keyboard().inline_keyboard[0],
         ]
     )
 
@@ -116,7 +131,7 @@ def logistics_entry_keyboard() -> InlineKeyboardMarkup:
                     callback_data="service:questionnaire:logistics_ved",
                 )
             ],
-            [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:root")],
+            flow_nav_keyboard().inline_keyboard[0],
         ]
     )
 
@@ -136,7 +151,7 @@ def analytics_entry_keyboard() -> InlineKeyboardMarkup:
                     callback_data="service:questionnaire:analytics_tnved",
                 )
             ],
-            [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:root")],
+            flow_nav_keyboard().inline_keyboard[0],
         ]
     )
 
@@ -156,7 +171,7 @@ def quick_audit_entry_keyboard() -> InlineKeyboardMarkup:
                     callback_data="service:questionnaire:quick_audit_inn",
                 )
             ],
-            [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:root")],
+            flow_nav_keyboard().inline_keyboard[0],
         ]
     )
 
@@ -176,7 +191,7 @@ def club_entry_keyboard() -> InlineKeyboardMarkup:
                     callback_data="service:questionnaire:club_partnership",
                 )
             ],
-            [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:root")],
+            flow_nav_keyboard().inline_keyboard[0],
         ]
     )
 
