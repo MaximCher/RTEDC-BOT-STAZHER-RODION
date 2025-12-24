@@ -140,7 +140,7 @@ def _format_rub(value: int) -> str:
 
 
 def _build_evidence(p: float, cap: Optional[int]) -> str:
-    percent = f"до {int(round(p * 100))}%"
+    percent = f"до {int(round(p * 100))}% подтверждённых расходов"
     if cap:
         return f"{percent}, лимит до {_format_rub(cap)} ₽"
     return percent
@@ -152,6 +152,25 @@ def format_estimates(estimates: List[SubsidyEstimate]) -> str:
     lines = ["📌 Предварительный расчёт по найденным условиям:"]
     for i, e in enumerate(estimates, start=1):
         lines.append(f"{i}) {e.evidence} → ~{_format_rub(e.estimated_rub)} ₽")
+    # Explain terms in plain language
+    spend = estimates[0].spend_rub
+    example_percent = estimates[0].percent or 0.0
+    example_cap = estimates[0].cap_rub
+    example_raw = int(round(spend * example_percent)) if example_percent > 0 else 0
+    lines.append("")
+    lines.append("Что значит «до X%» и «лимит»:")
+    lines.append("- «до X%» — максимальная доля компенсации от подтверждённых расходов (не всегда дают максимум).")
+    lines.append("- «лимит» — потолок выплаты по программе, даже если X% даёт больше.")
+    lines.append(f"Формула: компенсация ≈ min(расходы × %, лимит).")
+    if example_percent > 0:
+        p_txt = f"{int(round(example_percent * 100))}%"
+        if example_cap:
+            lines.append(
+                f"Пример: расходы {_format_rub(spend)} ₽ × {p_txt} = {_format_rub(example_raw)} ₽, "
+                f"но если лимит {_format_rub(example_cap)} ₽ → выплата ≈ {_format_rub(min(example_raw, example_cap))} ₽."
+            )
+        else:
+            lines.append(f"Пример: расходы {_format_rub(spend)} ₽ × {p_txt} = {_format_rub(example_raw)} ₽.")
     lines.append("⚠️ Это ориентир. Итог зависит от отбора и пакета документов.")
     return "\n".join(lines)
 
