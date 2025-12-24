@@ -12,7 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
 from src.utils.funnel import log_event
-from src.utils.keyboards import back_to_menu_keyboard, lead_actions_keyboard
+from src.utils.keyboards import flow_nav_keyboard, lead_actions_keyboard, services_keyboard
+from src.utils.messages import msg
 from src.utils.ui_flow import format_step, ui_upsert
 
 router = Router()
@@ -30,6 +31,47 @@ _QA_QUESTIONS: List[Tuple[str, str]] = [
     ("focus", "3) Что важно проверить? (риски/суды/финансы/исп. производства/всё)"),
     ("urgency", "4) Срочность: сейчас / сегодня / не срочно"),
 ]
+
+
+@router.callback_query(F.data == "audit:quick:back")
+async def quick_audit_back(callback: CallbackQuery, state: FSMContext) -> None:
+    current = await state.get_state()
+    if current != QuickAudit.waiting_for_answer.state:
+        await callback.answer()
+        return
+
+    data = await state.get_data()
+    step = int(data.get("qa_step", 0))
+    answers: Dict[str, str] = dict(data.get("qa_answers") or {})
+
+    if step <= 0:
+        await state.clear()
+        try:
+            await callback.message.edit_text(msg("choose_service"), reply_markup=services_keyboard())
+        except Exception:
+            await callback.message.answer(msg("choose_service"), reply_markup=services_keyboard())
+        await callback.answer()
+        return
+
+    new_step = step - 1
+    key, _ = _QA_QUESTIONS[new_step]
+    answers.pop(key, None)
+    await state.update_data(qa_step=new_step, qa_answers=answers)
+
+    await ui_upsert(
+        bot=callback.message.bot,
+        state=state,
+        chat_id=callback.message.chat.id,
+        prefer_message_id=callback.message.message_id,
+        text=format_step(
+            title="SRVT • Quick Audit по ИНН",
+            step=new_step + 1,
+            total=len(_QA_QUESTIONS),
+            question=_QA_QUESTIONS[new_step][1],
+        ),
+        reply_markup=flow_nav_keyboard(None if new_step <= 0 else "audit:quick:back"),
+    )
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("audit:quick:start:"))
@@ -62,7 +104,7 @@ async def start_quick_audit(callback: CallbackQuery, state: FSMContext, session:
             intro="Ок, сделаем быстрый аудит по ИНН. Это займёт ~1 минуту.",
             question=_QA_QUESTIONS[0][1],
         ),
-        reply_markup=back_to_menu_keyboard(),
+        reply_markup=flow_nav_keyboard(None),
     )
     await callback.answer()
 
@@ -97,7 +139,7 @@ async def handle_quick_audit_answer(message: Message, state: FSMContext, session
                     intro="Ошибка: не вижу ИНН. Пришлите 10 или 12 цифр (без пробелов).",
                     question=q_text,
                 ),
-                reply_markup=back_to_menu_keyboard(),
+                reply_markup=flow_nav_keyboard("audit:quick:back" if step > 0 else None),
             )
             return
         text = m.group(0)
@@ -131,7 +173,7 @@ async def handle_quick_audit_answer(message: Message, state: FSMContext, session
                 total=len(_QA_QUESTIONS),
                 question=_QA_QUESTIONS[step][1],
             ),
-            reply_markup=back_to_menu_keyboard(),
+            reply_markup=flow_nav_keyboard("audit:quick:back" if step > 0 else None),
         )
         return
 

@@ -13,7 +13,7 @@ from src.models.user_memory import UserMemory
 from src.services.finance_calc import estimate_refinance, parse_percent, parse_term_months
 from src.services.subsidy_calc import parse_money_rub
 from src.utils.funnel import log_event
-from src.utils.keyboards import back_to_menu_keyboard, lead_actions_keyboard
+from src.utils.keyboards import flow_nav_keyboard, lead_actions_keyboard, services_keyboard
 from src.utils.messages import msg
 from src.utils.ui_flow import format_step, ui_upsert
 
@@ -44,6 +44,48 @@ def _goal_is_refi(raw: str) -> bool:
 def _first_money(text: str) -> Optional[int]:
     values = parse_money_rub(text)
     return max(values) if values else None
+
+
+@router.callback_query(F.data == "finance:calc:back")
+async def finance_calc_back(callback: CallbackQuery, state: FSMContext) -> None:
+    # Back within finance calc flow
+    current = await state.get_state()
+    if current != FinanceCalc.waiting_for_answer.state:
+        await callback.answer()
+        return
+
+    data = await state.get_data()
+    step = int(data.get("fin_step", 0))
+    answers: Dict[str, str] = dict(data.get("fin_answers") or {})
+
+    if step <= 0:
+        await state.clear()
+        try:
+            await callback.message.edit_text(msg("choose_service"), reply_markup=services_keyboard())
+        except Exception:
+            await callback.message.answer(msg("choose_service"), reply_markup=services_keyboard())
+        await callback.answer()
+        return
+
+    new_step = step - 1
+    key, _ = _FIN_QUESTIONS[new_step]
+    answers.pop(key, None)
+    await state.update_data(fin_step=new_step, fin_answers=answers)
+
+    await ui_upsert(
+        bot=callback.message.bot,
+        state=state,
+        chat_id=callback.message.chat.id,
+        prefer_message_id=callback.message.message_id,
+        text=format_step(
+            title="SRVT • Финансирование / рефинанс",
+            step=new_step + 1,
+            total=len(_FIN_QUESTIONS),
+            question=_FIN_QUESTIONS[new_step][1],
+        ),
+        reply_markup=flow_nav_keyboard(None if new_step <= 0 else "finance:calc:back"),
+    )
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("finance:calc:start:"))
@@ -77,7 +119,7 @@ async def start_finance_calc(callback: CallbackQuery, state: FSMContext, session
         chat_id=callback.message.chat.id,
         prefer_message_id=callback.message.message_id,
         text=text,
-        reply_markup=back_to_menu_keyboard(),
+        reply_markup=flow_nav_keyboard(None),
     )
     await callback.answer()
 
@@ -113,7 +155,7 @@ async def handle_finance_calc_answer(message: Message, state: FSMContext, sessio
                     intro="Ошибка: не вижу сумму. Пример: «25 млн ₽» или «12 500 000».",
                     question=q_text,
                 ),
-                reply_markup=back_to_menu_keyboard(),
+                reply_markup=flow_nav_keyboard("finance:calc:back" if step > 0 else None),
             )
             return
     if key == "rate" and text.lower() not in {"не знаю", "незнаю", "не знаю.", "нет"}:
@@ -129,7 +171,7 @@ async def handle_finance_calc_answer(message: Message, state: FSMContext, sessio
                     intro="Ошибка: не вижу % ставку. Пример: «18%» или «16.5».",
                     question=q_text,
                 ),
-                reply_markup=back_to_menu_keyboard(),
+                reply_markup=flow_nav_keyboard("finance:calc:back" if step > 0 else None),
             )
             return
     if key == "term":
@@ -145,7 +187,7 @@ async def handle_finance_calc_answer(message: Message, state: FSMContext, sessio
                     intro="Ошибка: не вижу срок. Пример: «36 мес» или «3 года».",
                     question=q_text,
                 ),
-                reply_markup=back_to_menu_keyboard(),
+                reply_markup=flow_nav_keyboard("finance:calc:back" if step > 0 else None),
             )
             return
 
@@ -179,7 +221,7 @@ async def handle_finance_calc_answer(message: Message, state: FSMContext, sessio
                 total=len(_FIN_QUESTIONS),
                 question=_FIN_QUESTIONS[step][1],
             ),
-            reply_markup=back_to_menu_keyboard(),
+            reply_markup=flow_nav_keyboard("finance:calc:back" if step > 0 else None),
         )
         return
 

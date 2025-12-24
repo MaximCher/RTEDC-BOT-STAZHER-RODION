@@ -20,6 +20,19 @@ def back_to_menu_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def flow_nav_keyboard(back_callback_data: str | None = None) -> InlineKeyboardMarkup:
+    """
+    Navigation keyboard for multi-step flows.
+    - If back_callback_data is provided: show "Назад" + "В меню" in one row.
+    - Otherwise: show only "В меню".
+    """
+    row = []
+    if back_callback_data:
+        row.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=back_callback_data))
+    row.append(InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:root"))
+    return InlineKeyboardMarkup(inline_keyboard=[row])
+
+
 def lead_actions_keyboard(service_key: str) -> InlineKeyboardMarkup:
     first_row = [
         InlineKeyboardButton(
@@ -175,7 +188,7 @@ def club_entry_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def meeting_window_keyboard() -> InlineKeyboardMarkup:
+def meeting_window_keyboard(include_back: bool = False) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -190,7 +203,14 @@ def meeting_window_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="Будни после 19:00", callback_data="lead:mw:weekdays_19"),
                 InlineKeyboardButton(text="Не важно", callback_data="lead:mw:any"),
             ],
-            [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:root")],
+            (
+                [
+                    InlineKeyboardButton(text="⬅️ Назад", callback_data="lead:back"),
+                    InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:root"),
+                ]
+                if include_back
+                else [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:root")]
+            ),
         ]
     )
 

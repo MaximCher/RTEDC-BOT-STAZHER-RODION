@@ -13,7 +13,7 @@ from src.bitrix import BitrixClient
 from src.models.bitrix_lead import BitrixLead
 from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
-from src.utils.keyboards import back_to_menu_keyboard, meeting_window_keyboard, services_keyboard
+from src.utils.keyboards import flow_nav_keyboard, meeting_window_keyboard, services_keyboard
 from src.utils.messages import msg
 from src.utils.rate_limit import FixedWindowRateLimiter
 from src.utils.funnel import log_event
@@ -28,6 +28,39 @@ _lead_rate_limiter = FixedWindowRateLimiter(limit=3, window_sec=60)  # 3 leads/m
 class LeadForm(StatesGroup):
     waiting_for_contact_data = State()
     waiting_for_meeting_window = State()
+
+
+@router.callback_query(F.data == "lead:back")
+async def lead_back(callback: CallbackQuery, state: FSMContext) -> None:
+    current = await state.get_state()
+    if current != LeadForm.waiting_for_meeting_window.state:
+        await callback.answer()
+        return
+
+    data = await state.get_data()
+    service_key = data.get("service_key")
+    if not isinstance(service_key, str):
+        await state.clear()
+        try:
+            await callback.message.edit_text(msg("choose_service"), reply_markup=services_keyboard())
+        except Exception:
+            await callback.message.answer(msg("choose_service"), reply_markup=services_keyboard())
+        await callback.answer()
+        return
+
+    # Go back to contact step (allow user to fix name/phone)
+    await state.set_state(LeadForm.waiting_for_contact_data)
+    await state.update_data(full_name=None, phone=None, username=None)
+
+    await ui_upsert(
+        bot=callback.message.bot,
+        state=state,
+        chat_id=callback.message.chat.id,
+        prefer_message_id=callback.message.message_id,
+        text=format_step(title="SRVT • Заявка", step=1, total=2, question=msg("lead_contact_request")),
+        reply_markup=flow_nav_keyboard(None),
+    )
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("lead:start:"))
@@ -54,7 +87,7 @@ async def lead_start(callback: CallbackQuery, state: FSMContext, session: AsyncS
             total=2,
             question=msg("lead_contact_request"),
         ),
-        reply_markup=back_to_menu_keyboard(),
+        reply_markup=flow_nav_keyboard(None),
     )
     await callback.answer()
 
@@ -87,7 +120,7 @@ async def lead_process_contact(
                 intro="Ошибка: не вижу телефон. Пример: Иванов Иван +79991234567",
                 question=msg("lead_contact_request"),
             ),
-            reply_markup=back_to_menu_keyboard(),
+            reply_markup=flow_nav_keyboard(None),
         )
         return
 
@@ -144,7 +177,7 @@ async def lead_process_contact(
             total=2,
             question=msg("lead_meeting_window_request"),
         ),
-        reply_markup=meeting_window_keyboard(),
+        reply_markup=meeting_window_keyboard(include_back=True),
     )
 
 

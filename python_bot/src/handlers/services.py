@@ -11,12 +11,13 @@ from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
 from src.utils.keyboards import (
     analytics_entry_keyboard,
-    back_to_menu_keyboard,
     club_entry_keyboard,
+    flow_nav_keyboard,
     lead_actions_keyboard,
     logistics_entry_keyboard,
     payments_entry_keyboard,
     quick_audit_entry_keyboard,
+    services_keyboard,
     subsidies_entry_keyboard,
 )
 from src.utils.messages import msg
@@ -30,6 +31,59 @@ router = Router()
 
 class ServiceQuestionnaire(StatesGroup):
     waiting_for_answer = State()
+
+
+@router.callback_query(F.data == "q:back")
+async def questionnaire_back(callback: CallbackQuery, state: FSMContext) -> None:
+    current = await state.get_state()
+    if current != ServiceQuestionnaire.waiting_for_answer.state:
+        await callback.answer()
+        return
+
+    data = await state.get_data()
+    service_key = data.get("selected_service")
+    if not isinstance(service_key, str) or service_key not in SERVICE_FLOWS:
+        await state.clear()
+        try:
+            await callback.message.edit_text(msg("choose_service"), reply_markup=services_keyboard())
+        except Exception:
+            await callback.message.answer(msg("choose_service"), reply_markup=services_keyboard())
+        await callback.answer()
+        return
+
+    flow = SERVICE_FLOWS[service_key]
+    questions: List[str] = flow["questions"]
+    index = int(data.get("questionnaire_index", 0))
+    answers: List[Dict[str, Any]] = list(data.get("questionnaire_answers", []))
+
+    if index <= 0:
+        await state.clear()
+        try:
+            await callback.message.edit_text(msg("choose_service"), reply_markup=services_keyboard())
+        except Exception:
+            await callback.message.answer(msg("choose_service"), reply_markup=services_keyboard())
+        await callback.answer()
+        return
+
+    new_index = index - 1
+    if answers:
+        answers.pop()
+    await state.update_data(questionnaire_index=new_index, questionnaire_answers=answers)
+
+    await ui_upsert(
+        bot=callback.message.bot,
+        state=state,
+        chat_id=callback.message.chat.id,
+        prefer_message_id=callback.message.message_id,
+        text=format_step(
+            title=f"SRVT • {SERVICES.get(service_key, service_key)}",
+            step=new_index + 1,
+            total=len(questions),
+            question=questions[new_index],
+        ),
+        reply_markup=flow_nav_keyboard(None if new_index <= 0 else "q:back"),
+    )
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("service:questionnaire:"))
@@ -83,7 +137,7 @@ async def handle_service_questionnaire_start(
         chat_id=callback.message.chat.id,
         prefer_message_id=callback.message.message_id,
         text=text,
-        reply_markup=back_to_menu_keyboard(),
+        reply_markup=flow_nav_keyboard(None),
     )
     await callback.answer()
 
@@ -195,7 +249,7 @@ async def handle_service_selection(
         chat_id=callback.message.chat.id,
         prefer_message_id=callback.message.message_id,
         text=text,
-        reply_markup=back_to_menu_keyboard(),
+        reply_markup=flow_nav_keyboard(None),
     )
     await callback.answer()
 
@@ -286,7 +340,7 @@ async def handle_questionnaire_answer(
             total=len(questions),
             question=questions[index],
         ),
-        reply_markup=back_to_menu_keyboard(),
+        reply_markup=flow_nav_keyboard("q:back" if index > 0 else None),
     )
 
 

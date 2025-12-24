@@ -12,7 +12,8 @@ from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
 from src.services.subsidy_calc import parse_money_rub
 from src.utils.funnel import log_event
-from src.utils.keyboards import back_to_menu_keyboard, lead_actions_keyboard
+from src.utils.keyboards import flow_nav_keyboard, lead_actions_keyboard, services_keyboard
+from src.utils.messages import msg
 from src.utils.ui_flow import format_step, ui_upsert
 
 router = Router()
@@ -35,6 +36,47 @@ _PAYMENTS_QUESTIONS: List[Tuple[str, str]] = [
 def _has_any_amount(text: str) -> bool:
     # Accept any digits, not only rubles
     return any(ch.isdigit() for ch in (text or ""))
+
+
+@router.callback_query(F.data == "payments:precheck:back")
+async def payments_precheck_back(callback: CallbackQuery, state: FSMContext) -> None:
+    current = await state.get_state()
+    if current != PaymentsPrecheck.waiting_for_answer.state:
+        await callback.answer()
+        return
+
+    data = await state.get_data()
+    step = int(data.get("pay_step", 0))
+    answers: Dict[str, str] = dict(data.get("pay_answers") or {})
+
+    if step <= 0:
+        await state.clear()
+        try:
+            await callback.message.edit_text(msg("choose_service"), reply_markup=services_keyboard())
+        except Exception:
+            await callback.message.answer(msg("choose_service"), reply_markup=services_keyboard())
+        await callback.answer()
+        return
+
+    new_step = step - 1
+    key, _ = _PAYMENTS_QUESTIONS[new_step]
+    answers.pop(key, None)
+    await state.update_data(pay_step=new_step, pay_answers=answers)
+
+    await ui_upsert(
+        bot=callback.message.bot,
+        state=state,
+        chat_id=callback.message.chat.id,
+        prefer_message_id=callback.message.message_id,
+        text=format_step(
+            title="SRVT • Международные платежи",
+            step=new_step + 1,
+            total=len(_PAYMENTS_QUESTIONS),
+            question=_PAYMENTS_QUESTIONS[new_step][1],
+        ),
+        reply_markup=flow_nav_keyboard(None if new_step <= 0 else "payments:precheck:back"),
+    )
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("payments:precheck:start:"))
@@ -67,7 +109,7 @@ async def start_payments_precheck(callback: CallbackQuery, state: FSMContext, se
             intro="Ок, быстро уточню детали и передам менеджеру SRVT. Это займёт ~1 минуту.",
             question=_PAYMENTS_QUESTIONS[0][1],
         ),
-        reply_markup=back_to_menu_keyboard(),
+        reply_markup=flow_nav_keyboard(None),
     )
     await callback.answer()
 
@@ -100,7 +142,7 @@ async def handle_payments_precheck_answer(message: Message, state: FSMContext, s
                 intro="Ошибка: не вижу сумму. Пример: «25 000 USD» или «1,2 млн ₽».",
                 question=q_text,
             ),
-            reply_markup=back_to_menu_keyboard(),
+            reply_markup=flow_nav_keyboard("payments:precheck:back" if step > 0 else None),
         )
         return
 
@@ -134,7 +176,7 @@ async def handle_payments_precheck_answer(message: Message, state: FSMContext, s
                 total=len(_PAYMENTS_QUESTIONS),
                 question=_PAYMENTS_QUESTIONS[step][1],
             ),
-            reply_markup=back_to_menu_keyboard(),
+            reply_markup=flow_nav_keyboard("payments:precheck:back" if step > 0 else None),
         )
         return
 

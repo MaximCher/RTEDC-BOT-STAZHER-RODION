@@ -11,7 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
 from src.utils.funnel import log_event
-from src.utils.keyboards import back_to_menu_keyboard, lead_actions_keyboard
+from src.utils.keyboards import flow_nav_keyboard, lead_actions_keyboard, services_keyboard
+from src.utils.messages import msg
 from src.utils.ui_flow import format_step, ui_upsert
 
 
@@ -29,6 +30,47 @@ _AN_QUESTIONS: List[Tuple[str, str]] = [
     ("inn", "4) ИНН вашей компании (если есть). Если не хотите — напишите «нет»"),
     ("timeline", "5) Когда нужен результат? (сейчас/в течение недели/позже)"),
 ]
+
+
+@router.callback_query(F.data == "analytics:report:back")
+async def analytics_report_back(callback: CallbackQuery, state: FSMContext) -> None:
+    current = await state.get_state()
+    if current != AnalyticsReport.waiting_for_answer.state:
+        await callback.answer()
+        return
+
+    data = await state.get_data()
+    step = int(data.get("an_step", 0))
+    answers: Dict[str, str] = dict(data.get("an_answers") or {})
+
+    if step <= 0:
+        await state.clear()
+        try:
+            await callback.message.edit_text(msg("choose_service"), reply_markup=services_keyboard())
+        except Exception:
+            await callback.message.answer(msg("choose_service"), reply_markup=services_keyboard())
+        await callback.answer()
+        return
+
+    new_step = step - 1
+    key, _ = _AN_QUESTIONS[new_step]
+    answers.pop(key, None)
+    await state.update_data(an_step=new_step, an_answers=answers)
+
+    await ui_upsert(
+        bot=callback.message.bot,
+        state=state,
+        chat_id=callback.message.chat.id,
+        prefer_message_id=callback.message.message_id,
+        text=format_step(
+            title="SRVT • Аналитика / ТН ВЭД",
+            step=new_step + 1,
+            total=len(_AN_QUESTIONS),
+            question=_AN_QUESTIONS[new_step][1],
+        ),
+        reply_markup=flow_nav_keyboard(None if new_step <= 0 else "analytics:report:back"),
+    )
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("analytics:report:start:"))
@@ -61,7 +103,7 @@ async def start_analytics_report(callback: CallbackQuery, state: FSMContext, ses
             intro="Ок, соберу вводные для аналитического отчёта SRVT. Это займёт ~1 минуту.",
             question=_AN_QUESTIONS[0][1],
         ),
-        reply_markup=back_to_menu_keyboard(),
+        reply_markup=flow_nav_keyboard(None),
     )
     await callback.answer()
 
@@ -111,7 +153,7 @@ async def handle_analytics_report_answer(message: Message, state: FSMContext, se
                 total=len(_AN_QUESTIONS),
                 question=_AN_QUESTIONS[step][1],
             ),
-            reply_markup=back_to_menu_keyboard(),
+            reply_markup=flow_nav_keyboard("analytics:report:back" if step > 0 else None),
         )
         return
 

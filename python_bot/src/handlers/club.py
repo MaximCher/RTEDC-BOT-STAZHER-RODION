@@ -11,7 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
 from src.utils.funnel import log_event
-from src.utils.keyboards import back_to_menu_keyboard, lead_actions_keyboard
+from src.utils.keyboards import flow_nav_keyboard, lead_actions_keyboard, services_keyboard
+from src.utils.messages import msg
 from src.utils.ui_flow import format_step, ui_upsert
 
 router = Router()
@@ -31,6 +32,47 @@ _CLUB_QUESTIONS: List[Tuple[str, str]] = [
     ("value", "4) Опишите кратко: как приводите клиентов/какие задачи закрываете? (1–2 фразы)"),
     ("volume", "5) Ожидаемый объём: сколько заявок/клиентов в месяц? (оценка)"),
 ]
+
+
+@router.callback_query(F.data == "club:apply:back")
+async def club_apply_back(callback: CallbackQuery, state: FSMContext) -> None:
+    current = await state.get_state()
+    if current != ClubApply.waiting_for_answer.state:
+        await callback.answer()
+        return
+
+    data = await state.get_data()
+    step = int(data.get("club_step", 0))
+    answers: Dict[str, str] = dict(data.get("club_answers") or {})
+
+    if step <= 0:
+        await state.clear()
+        try:
+            await callback.message.edit_text(msg("choose_service"), reply_markup=services_keyboard())
+        except Exception:
+            await callback.message.answer(msg("choose_service"), reply_markup=services_keyboard())
+        await callback.answer()
+        return
+
+    new_step = step - 1
+    key, _ = _CLUB_QUESTIONS[new_step]
+    answers.pop(key, None)
+    await state.update_data(club_step=new_step, club_answers=answers)
+
+    await ui_upsert(
+        bot=callback.message.bot,
+        state=state,
+        chat_id=callback.message.chat.id,
+        prefer_message_id=callback.message.message_id,
+        text=format_step(
+            title="SRVT • Клуб / партнёрство",
+            step=new_step + 1,
+            total=len(_CLUB_QUESTIONS),
+            question=_CLUB_QUESTIONS[new_step][1],
+        ),
+        reply_markup=flow_nav_keyboard(None if new_step <= 0 else "club:apply:back"),
+    )
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("club:apply:start:"))
@@ -63,7 +105,7 @@ async def start_club_apply(callback: CallbackQuery, state: FSMContext, session: 
             intro="Ок, быстро уточню детали и передам менеджеру SRVT. Это займёт ~1 минуту.",
             question=_CLUB_QUESTIONS[0][1],
         ),
-        reply_markup=back_to_menu_keyboard(),
+        reply_markup=flow_nav_keyboard(None),
     )
     await callback.answer()
 
@@ -113,7 +155,7 @@ async def handle_club_apply_answer(message: Message, state: FSMContext, session:
                 total=len(_CLUB_QUESTIONS),
                 question=_CLUB_QUESTIONS[step][1],
             ),
-            reply_markup=back_to_menu_keyboard(),
+            reply_markup=flow_nav_keyboard("club:apply:back" if step > 0 else None),
         )
         return
 

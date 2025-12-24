@@ -19,7 +19,7 @@ from src.services.subsidy_calc import (
 )
 from src.utils.messages import msg
 from src.utils.funnel import log_event
-from src.utils.keyboards import back_to_menu_keyboard, lead_actions_keyboard
+from src.utils.keyboards import flow_nav_keyboard, lead_actions_keyboard, services_keyboard
 from src.utils.ui_flow import format_step, ui_upsert
 from src.vector_store import VectorStore
 
@@ -65,6 +65,47 @@ def _build_subsidy_query(answers: Dict[str, str]) -> str:
     return " ".join([p for p in parts if p])
 
 
+@router.callback_query(F.data == "subsidy:calc:back")
+async def subsidy_calc_back(callback: CallbackQuery, state: FSMContext) -> None:
+    current = await state.get_state()
+    if current != SubsidyCalc.waiting_for_answer.state:
+        await callback.answer()
+        return
+
+    data = await state.get_data()
+    step = int(data.get("calc_step", 0))
+    answers: Dict[str, str] = dict(data.get("calc_answers") or {})
+
+    if step <= 0:
+        await state.clear()
+        try:
+            await callback.message.edit_text(msg("choose_service"), reply_markup=services_keyboard())
+        except Exception:
+            await callback.message.answer(msg("choose_service"), reply_markup=services_keyboard())
+        await callback.answer()
+        return
+
+    new_step = step - 1
+    key, _ = _SUBSIDY_CALC_QUESTIONS[new_step]
+    answers.pop(key, None)
+    await state.update_data(calc_step=new_step, calc_answers=answers)
+
+    await ui_upsert(
+        bot=callback.message.bot,
+        state=state,
+        chat_id=callback.message.chat.id,
+        prefer_message_id=callback.message.message_id,
+        text=format_step(
+            title="SRVT • Расчёт субсидии",
+            step=new_step + 1,
+            total=len(_SUBSIDY_CALC_QUESTIONS),
+            question=_SUBSIDY_CALC_QUESTIONS[new_step][1],
+        ),
+        reply_markup=flow_nav_keyboard(None if new_step <= 0 else "subsidy:calc:back"),
+    )
+    await callback.answer()
+
+
 @router.callback_query(F.data.startswith("subsidy:calc:start:"))
 async def start_subsidy_calc(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
     service_key = (callback.data or "").split("subsidy:calc:start:", 1)[-1].strip()
@@ -95,7 +136,7 @@ async def start_subsidy_calc(callback: CallbackQuery, state: FSMContext, session
             intro=msg("subsidy_calc_intro"),
             question=_SUBSIDY_CALC_QUESTIONS[0][1],
         ),
-        reply_markup=back_to_menu_keyboard(),
+        reply_markup=flow_nav_keyboard(None),
     )
     await callback.answer()
 
@@ -131,7 +172,7 @@ async def handle_subsidy_calc_answer(message: Message, state: FSMContext, sessio
                     intro="Ошибка: не вижу сумму/диапазон в ₽. Пример: «3–5 млн ₽» или «2 500 000».",
                     question=q_text,
                 ),
-                reply_markup=back_to_menu_keyboard(),
+                reply_markup=flow_nav_keyboard("subsidy:calc:back" if step > 0 else None),
             )
             return
 
@@ -165,7 +206,7 @@ async def handle_subsidy_calc_answer(message: Message, state: FSMContext, sessio
                 total=len(_SUBSIDY_CALC_QUESTIONS),
                 question=_SUBSIDY_CALC_QUESTIONS[step][1],
             ),
-            reply_markup=back_to_menu_keyboard(),
+            reply_markup=flow_nav_keyboard("subsidy:calc:back" if step > 0 else None),
         )
         return
 
