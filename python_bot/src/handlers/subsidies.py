@@ -28,6 +28,7 @@ from src.utils.keyboards import (
     subsidies_entry_keyboard,
 )
 from src.utils.ui_flow import format_step, ui_upsert
+from src.utils.ui_flow import ui_send_persistent
 from src.utils.service_entry import entry_screen_for_service
 from src.vector_store import VectorStore
 
@@ -268,14 +269,20 @@ async def handle_subsidy_calc_answer(message: Message, state: FSMContext, sessio
     else:
         result = f"{msg('subsidy_calc_result_header')}\n\n{msg('subsidy_calc_no_context')}"
 
-    await ui_upsert(
+    # Persist final result in chat history + add CTA ("продажа")
+    result = (
+        f"{result}\n\n"
+        "Хотите точный расчёт под вашу ситуацию (программа/условия/пакет документов)?\n"
+        "Нажмите «📩 Оставить заявку» — персональный менеджер SRVT свяжется в течение 15 минут (в рабочее время) "
+        "и проведёт по шагам."
+    )
+    await ui_send_persistent(
         bot=message.bot,
         state=state,
         chat_id=message.chat.id,
         text=result,
         reply_markup=lead_actions_keyboard("subsidies_financing"),
         parse_mode=None,
-        keep_at_bottom=True,
     )
 
 
@@ -385,17 +392,35 @@ async def handle_subsidy_question(
     safe_answer = answer.strip()
     if len(safe_answer) > 3800:
         safe_answer = safe_answer[:3800].rstrip() + "\n\n(…ответ сокращён)"
+    answer_text = (
+        f"<b>SRVT • Вопрос по субсидиям</b>\n\n"
+        f"<b>Вопрос:</b> {text}\n\n"
+        f"<b>Ответ:</b>\n{safe_answer}\n\n"
+        "Если хотите — можно быстро проверить применимость и посчитать точнее под вашу компанию.\n"
+        "Нажмите «📩 Оставить заявку» — персональный менеджер SRVT свяжется в течение 15 минут (в рабочее время) "
+        "и предложит следующий шаг."
+    )
+    # Persist each answer in chat history
+    await ui_send_persistent(
+        bot=message.bot,
+        state=state,
+        chat_id=message.chat.id,
+        text=answer_text,
+        reply_markup=subsidy_chat_keyboard(service_key),
+        parse_mode="HTML",
+        delete_transient=False,
+    )
+    # Re-render prompt at bottom (transient) so next question is always near the input
     await ui_upsert(
         bot=message.bot,
         state=state,
         chat_id=message.chat.id,
-        text=(
-            f"<b>SRVT • Вопрос по субсидиям</b>\n\n"
-            f"<b>Вопрос:</b> {text}\n\n"
-            f"<b>Ответ:</b>\n{safe_answer}\n\n"
-            "Можно задать следующий вопрос — просто напишите его."
+        text=format_step(
+            title="SRVT • Вопрос по субсидиям",
+            step=1,
+            total=1,
+            question="Можно задать следующий вопрос — просто напишите его.",
         ),
-        reply_markup=subsidy_chat_keyboard(service_key),
-        parse_mode="HTML",
+        reply_markup=flow_nav_keyboard("subsidy:chat:back"),
         keep_at_bottom=True,
     )

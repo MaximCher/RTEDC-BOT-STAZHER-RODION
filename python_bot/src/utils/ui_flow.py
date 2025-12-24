@@ -106,3 +106,29 @@ async def ui_upsert(
     await state.update_data(**{UI_MESSAGE_ID_KEY: int(sent.message_id), UI_MODE_KEY: "send"})
 
 
+async def ui_send_persistent(
+    *,
+    bot: Bot,
+    state: FSMContext,
+    chat_id: int,
+    text: str,
+    reply_markup: Optional[InlineKeyboardMarkup] = None,
+    parse_mode: str | None = "HTML",
+    delete_transient: bool = True,
+) -> None:
+    """
+    Send an important message that should remain in chat history (not edited/deleted later).
+    Optionally deletes the current transient UI message tracked in state.
+    """
+    data = await state.get_data()
+    msg_id = data.get(UI_MESSAGE_ID_KEY)
+    if delete_transient and isinstance(msg_id, int) and msg_id > 0:
+        try:
+            await bot.delete_message(chat_id=chat_id, message_id=msg_id)
+        except Exception:
+            pass
+    await bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup, parse_mode=parse_mode)
+    # Clear transient tracking so future UI updates won't target the persistent message.
+    await state.update_data(**{UI_MESSAGE_ID_KEY: 0, UI_MODE_KEY: "persistent"})
+
+

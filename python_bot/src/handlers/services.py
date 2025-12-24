@@ -24,7 +24,7 @@ from src.utils.messages import msg
 from src.utils.funnel import log_event
 
 from src.config import SERVICE_FLOWS, SERVICES
-from src.utils.ui_flow import format_step, ui_upsert
+from src.utils.ui_flow import format_step, ui_upsert, ui_send_persistent
 from src.utils.service_entry import entry_screen_for_service
 
 router = Router()
@@ -330,14 +330,13 @@ async def handle_questionnaire_answer(
             event="questionnaire_complete",
             service_key=service_key,
         )
-        await ui_upsert(
+        await ui_send_persistent(
             bot=message.bot,
             state=state,
             chat_id=message.chat.id,
             text=flow["final_text"],
             reply_markup=lead_actions_keyboard(service_key),
             parse_mode=None,
-            keep_at_bottom=True,
         )
         return
 

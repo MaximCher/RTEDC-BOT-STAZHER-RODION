@@ -43,7 +43,10 @@ def lead_actions_keyboard(service_key: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             first_row,
-            flow_nav_keyboard().inline_keyboard[0],
+            [
+                InlineKeyboardButton(text="⬅️ Назад", callback_data=f"entry:new:{service_key}"),
+                InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:new"),
+            ],
         ]
     )
 
@@ -58,7 +61,10 @@ def subsidy_chat_keyboard(service_key: str) -> InlineKeyboardMarkup:
                     callback_data=f"lead:start:{service_key}",
                 )
             ],
-            flow_nav_keyboard("subsidy:chat:back").inline_keyboard[0],
+            [
+                InlineKeyboardButton(text="⬅️ Назад", callback_data=f"entry:new:{service_key}"),
+                InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:new"),
+            ],
         ]
     )
 

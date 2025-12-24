@@ -17,7 +17,7 @@ from src.utils.keyboards import flow_nav_keyboard, meeting_window_keyboard, serv
 from src.utils.messages import msg
 from src.utils.rate_limit import FixedWindowRateLimiter
 from src.utils.funnel import log_event
-from src.utils.ui_flow import format_step, ui_upsert
+from src.utils.ui_flow import format_step, ui_upsert, ui_send_persistent
 from src.utils.service_entry import entry_screen_for_service
 
 
@@ -310,14 +310,14 @@ async def lead_process_meeting_window(
         summary_text=summary_text,
         meeting_window=meeting_window,
     )
-    await ui_upsert(
+    await ui_send_persistent(
         bot=message.bot,
         state=state,
         chat_id=message.chat.id,
         text=msg("lead_received"),
         reply_markup=services_keyboard(),
         parse_mode=None,
-        keep_at_bottom=True,
+        delete_transient=False,
     )
     await state.clear()
 
@@ -371,15 +371,14 @@ async def lead_meeting_window_pick(
         meeting_window=meeting_window,
     )
 
-    await ui_upsert(
+    await ui_send_persistent(
         bot=callback.message.bot,
         state=state,
         chat_id=callback.message.chat.id,
-        prefer_message_id=callback.message.message_id,
         text=msg("lead_received"),
         reply_markup=services_keyboard(),
         parse_mode=None,
-        keep_at_bottom=True,
+        delete_transient=False,
     )
     await state.clear()
     await callback.answer()

@@ -12,7 +12,7 @@ from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
 from src.utils.funnel import log_event
 from src.utils.keyboards import flow_nav_keyboard, lead_actions_keyboard
-from src.utils.ui_flow import format_step, ui_upsert
+from src.utils.ui_flow import format_step, ui_upsert, ui_send_persistent
 from src.utils.service_entry import entry_screen_for_service
 
 router = Router()
@@ -216,14 +216,13 @@ async def handle_logistics_quote_answer(message: Message, state: FSMContext, ses
     await UserMemory.add_message(session, message.from_user.id, "system", summary_text)
     await state.update_data(questionnaire_summary=summary_text)
 
-    await ui_upsert(
+    await ui_send_persistent(
         bot=message.bot,
         state=state,
         chat_id=message.chat.id,
         text=result,
         reply_markup=lead_actions_keyboard(service_key),
         parse_mode=None,
-        keep_at_bottom=True,
     )
 
 

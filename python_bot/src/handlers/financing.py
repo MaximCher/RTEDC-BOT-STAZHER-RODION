@@ -14,7 +14,7 @@ from src.services.finance_calc import estimate_refinance, parse_percent, parse_t
 from src.services.subsidy_calc import parse_money_rub
 from src.utils.funnel import log_event
 from src.utils.keyboards import flow_nav_keyboard, lead_actions_keyboard
-from src.utils.ui_flow import format_step, ui_upsert
+from src.utils.ui_flow import format_step, ui_upsert, ui_send_persistent
 from src.utils.service_entry import entry_screen_for_service
 
 
@@ -284,14 +284,18 @@ async def handle_finance_calc_answer(message: Message, state: FSMContext, sessio
     await UserMemory.add_message(session, user_id, "system", summary_text)
     await state.update_data(questionnaire_summary=summary_text)
 
-    await ui_upsert(
+    estimate_text = (
+        f"{estimate_text}\n\n"
+        "Хотите подобрать программу/банк и посчитать точнее? Нажмите «📩 Оставить заявку» — "
+        "персональный менеджер SRVT свяжется (в рабочее время)."
+    )
+    await ui_send_persistent(
         bot=message.bot,
         state=state,
         chat_id=message.chat.id,
         text=estimate_text,
         reply_markup=lead_actions_keyboard("subsidies_financing"),
         parse_mode=None,
-        keep_at_bottom=True,
     )
 
 
