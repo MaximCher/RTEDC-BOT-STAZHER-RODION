@@ -25,6 +25,7 @@ from src.utils.funnel import log_event
 
 from src.config import SERVICE_FLOWS, SERVICES
 from src.utils.ui_flow import format_step, ui_upsert
+from src.utils.service_entry import entry_screen_for_service
 
 router = Router()
 
@@ -58,10 +59,16 @@ async def questionnaire_back(callback: CallbackQuery, state: FSMContext) -> None
 
     if index <= 0:
         await state.clear()
-        try:
-            await callback.message.edit_text(msg("choose_service"), reply_markup=services_keyboard())
-        except Exception:
-            await callback.message.answer(msg("choose_service"), reply_markup=services_keyboard())
+        text, kb, pm = entry_screen_for_service(service_key)
+        await ui_upsert(
+            bot=callback.message.bot,
+            state=state,
+            chat_id=callback.message.chat.id,
+            prefer_message_id=callback.message.message_id,
+            text=text,
+            reply_markup=kb,
+            parse_mode=pm,
+        )
         await callback.answer()
         return
 

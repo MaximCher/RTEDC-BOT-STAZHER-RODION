@@ -28,6 +28,7 @@ from src.utils.keyboards import (
     subsidies_entry_keyboard,
 )
 from src.utils.ui_flow import format_step, ui_upsert
+from src.utils.service_entry import entry_screen_for_service
 from src.vector_store import VectorStore
 
 router = Router()
@@ -82,13 +83,20 @@ async def subsidy_calc_back(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
     step = int(data.get("calc_step", 0))
     answers: Dict[str, str] = dict(data.get("calc_answers") or {})
+    service_key = data.get("service_key") if isinstance(data.get("service_key"), str) else "subsidies_financing"
 
     if step <= 0:
         await state.clear()
-        try:
-            await callback.message.edit_text(msg("choose_service"), reply_markup=services_keyboard())
-        except Exception:
-            await callback.message.answer(msg("choose_service"), reply_markup=services_keyboard())
+        text, kb, pm = entry_screen_for_service(service_key)
+        await ui_upsert(
+            bot=callback.message.bot,
+            state=state,
+            chat_id=callback.message.chat.id,
+            prefer_message_id=callback.message.message_id,
+            text=text,
+            reply_markup=kb,
+            parse_mode=pm,
+        )
         await callback.answer()
         return
 

@@ -11,9 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
 from src.utils.funnel import log_event
-from src.utils.keyboards import flow_nav_keyboard, lead_actions_keyboard, services_keyboard
-from src.utils.messages import msg
+from src.utils.keyboards import flow_nav_keyboard, lead_actions_keyboard
 from src.utils.ui_flow import format_step, ui_upsert
+from src.utils.service_entry import entry_screen_for_service
 
 
 router = Router()
@@ -42,13 +42,20 @@ async def analytics_report_back(callback: CallbackQuery, state: FSMContext) -> N
     data = await state.get_data()
     step = int(data.get("an_step", 0))
     answers: Dict[str, str] = dict(data.get("an_answers") or {})
+    service_key = data.get("service_key") if isinstance(data.get("service_key"), str) else "analytics_tnved"
 
     if step <= 0:
         await state.clear()
-        try:
-            await callback.message.edit_text(msg("choose_service"), reply_markup=services_keyboard())
-        except Exception:
-            await callback.message.answer(msg("choose_service"), reply_markup=services_keyboard())
+        text, kb, pm = entry_screen_for_service(service_key)
+        await ui_upsert(
+            bot=callback.message.bot,
+            state=state,
+            chat_id=callback.message.chat.id,
+            prefer_message_id=callback.message.message_id,
+            text=text,
+            reply_markup=kb,
+            parse_mode=pm,
+        )
         await callback.answer()
         return
 
