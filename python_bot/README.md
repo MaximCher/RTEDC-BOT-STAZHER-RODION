@@ -58,6 +58,7 @@ docker compose exec bot python scripts/ingest_pdf_subsidies.py --pdf data/subsid
 
 Пароль берётся из `.env`:
 - `ADMIN_PASSWORD=...`
+- `WEB_SESSION_SECRET=...` (секрет для подписи cookie‑сессий админки)
 
 Функции:
 - список пользователей (агрегация `dialog_messages`)
@@ -74,6 +75,7 @@ docker compose exec bot python scripts/ingest_pdf_subsidies.py --pdf data/subsid
 - `OPENAI_API_KEY` (нужен для RAG и AI‑ответов)
 - `BITRIX24_WEBHOOK_URL` (опционально, можно пустым на этапе разработки)
 - `ADMIN_PASSWORD` (для админки)
+- `WEB_SESSION_SECRET` (для админки)
 
 ## Prod (Nginx reverse proxy)
 

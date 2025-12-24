@@ -48,6 +48,9 @@ class Settings(BaseSettings):
 
     # Admin panel
     admin_password: str = Field("ChangeThisPassword123!", alias="ADMIN_PASSWORD")
+    web_session_secret: str = Field(
+        "ChangeThisSecretKey123!", alias="WEB_SESSION_SECRET"
+    )  # used to sign admin sessions
     web_host: str = Field("0.0.0.0", alias="WEB_HOST")
     web_port: int = Field(8000, alias="WEB_PORT")
     webapp_public_url: str = Field("https://example.com/admin", alias="WEBAPP_PUBLIC_URL")

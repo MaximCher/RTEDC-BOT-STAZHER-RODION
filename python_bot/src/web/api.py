@@ -17,9 +17,7 @@ from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
 from src.models.staff import StaffMember
 from src.web.auth import (
-    SESSION_COOKIE,
-    create_session,
-    destroy_session,
+    SESSION_KEY,
     require_auth,
     validate_password,
 )
@@ -65,27 +63,15 @@ async def _get_session() -> AsyncSession:
 
 def register_api(app: FastAPI) -> None:
     @app.post("/api/login")
-    async def login(payload: LoginRequest) -> JSONResponse:
+    async def login(request: Request, payload: LoginRequest) -> JSONResponse:
         validate_password(payload.password)
-        session_id = create_session()
-        response = JSONResponse({"success": True})
-        response.set_cookie(
-            key=SESSION_COOKIE,
-            value=session_id,
-            httponly=True,
-            max_age=86400,
-            samesite="lax",
-        )
-        return response
+        request.session[SESSION_KEY] = True
+        return JSONResponse({"success": True})
 
     @app.post("/api/logout")
     async def logout(request: Request) -> JSONResponse:
-        session_id = request.cookies.get(SESSION_COOKIE)
-        if session_id:
-            destroy_session(session_id)
-        response = JSONResponse({"success": True})
-        response.delete_cookie(SESSION_COOKIE)
-        return response
+        request.session.clear()
+        return JSONResponse({"success": True})
 
     @app.get("/api/users")
     async def get_users(

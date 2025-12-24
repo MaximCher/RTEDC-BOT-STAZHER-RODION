@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
 from src.config import settings  # type: ignore
 from src.database import close_db, init_db
 from src.logger import setup_logging
@@ -32,6 +33,16 @@ def create_app() -> FastAPI:
     @app.get("/", response_class=HTMLResponse)
     async def index(request: Request) -> HTMLResponse:
         return templates.TemplateResponse("index.html", {"request": request})
+
+    # Cookie-signed sessions for admin login (no in-memory session storage).
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=settings.web_session_secret,
+        session_cookie="admin_session",
+        max_age=86400,  # 1 day
+        same_site="lax",
+        https_only=not settings.debug_mode,
+    )
 
     @app.get("/health")
     async def health(checkOpenAI: bool = False) -> dict:  # noqa: N803
