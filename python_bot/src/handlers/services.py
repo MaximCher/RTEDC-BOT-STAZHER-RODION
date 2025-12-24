@@ -69,8 +69,11 @@ async def handle_service_questionnaire_start(
     )
 
     text = f"{flow['description']}\n\n{flow['questions'][0]}"
-    # Send new message (don't rely on edit_text for all contexts)
-    await callback.message.answer(text, reply_markup=back_to_menu_keyboard())
+    # Prefer editing to avoid chat spam; fallback to sending.
+    try:
+        await callback.message.edit_text(text, reply_markup=back_to_menu_keyboard())
+    except Exception:
+        await callback.message.answer(text, reply_markup=back_to_menu_keyboard())
     await callback.answer()
 
 
@@ -108,37 +111,55 @@ async def handle_service_selection(
     # Special SRVT-style entry for subsidies/financing: calculators and quick actions first.
     if service_key == "subsidies_financing":
         await state.clear()
-        await callback.message.answer(flow["description"], reply_markup=subsidies_entry_keyboard())
+        try:
+            await callback.message.edit_text(flow["description"], reply_markup=subsidies_entry_keyboard())
+        except Exception:
+            await callback.message.answer(flow["description"], reply_markup=subsidies_entry_keyboard())
         await callback.answer()
         return
 
     if service_key == "international_payments":
         await state.clear()
-        await callback.message.answer(flow["description"], reply_markup=payments_entry_keyboard())
+        try:
+            await callback.message.edit_text(flow["description"], reply_markup=payments_entry_keyboard())
+        except Exception:
+            await callback.message.answer(flow["description"], reply_markup=payments_entry_keyboard())
         await callback.answer()
         return
 
     if service_key == "logistics_ved":
         await state.clear()
-        await callback.message.answer(flow["description"], reply_markup=logistics_entry_keyboard())
+        try:
+            await callback.message.edit_text(flow["description"], reply_markup=logistics_entry_keyboard())
+        except Exception:
+            await callback.message.answer(flow["description"], reply_markup=logistics_entry_keyboard())
         await callback.answer()
         return
 
     if service_key == "analytics_tnved":
         await state.clear()
-        await callback.message.answer(flow["description"], reply_markup=analytics_entry_keyboard())
+        try:
+            await callback.message.edit_text(flow["description"], reply_markup=analytics_entry_keyboard())
+        except Exception:
+            await callback.message.answer(flow["description"], reply_markup=analytics_entry_keyboard())
         await callback.answer()
         return
 
     if service_key == "quick_audit_inn":
         await state.clear()
-        await callback.message.answer(flow["description"], reply_markup=quick_audit_entry_keyboard())
+        try:
+            await callback.message.edit_text(flow["description"], reply_markup=quick_audit_entry_keyboard())
+        except Exception:
+            await callback.message.answer(flow["description"], reply_markup=quick_audit_entry_keyboard())
         await callback.answer()
         return
 
     if service_key == "club_partnership":
         await state.clear()
-        await callback.message.answer(flow["description"], reply_markup=club_entry_keyboard())
+        try:
+            await callback.message.edit_text(flow["description"], reply_markup=club_entry_keyboard())
+        except Exception:
+            await callback.message.answer(flow["description"], reply_markup=club_entry_keyboard())
         await callback.answer()
         return
 

@@ -37,13 +37,24 @@ async def cmd_start(message: Message, state: FSMContext, session: AsyncSession) 
 @router.callback_query(F.data == "menu:root")
 async def back_to_menu(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
-    # UX: don't force users to type /start. Send a fresh menu message and
-    # remove inline buttons from the message they clicked.
+    # UX: avoid chat spam. Prefer re-rendering menu in the same message.
     try:
-        await callback.message.edit_reply_markup(reply_markup=None)
+        await callback.message.edit_text(msg("choose_service"), reply_markup=services_keyboard())
+        await callback.answer()
+        return
     except Exception:
         pass
-    await callback.message.answer(msg("choose_service"), reply_markup=services_keyboard())
+
+    # Fallback: if message can't be edited (too old, etc.) delete & send one fresh menu.
+    chat_id = callback.message.chat.id
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+    try:
+        await callback.message.bot.send_message(chat_id, msg("choose_service"), reply_markup=services_keyboard())
+    except Exception:
+        pass
     await callback.answer()
 
 
