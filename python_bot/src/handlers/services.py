@@ -81,7 +81,7 @@ async def questionnaire_back(callback: CallbackQuery, state: FSMContext) -> None
             total=len(questions),
             question=questions[new_index],
         ),
-        reply_markup=flow_nav_keyboard(None if new_index <= 0 else "q:back"),
+        reply_markup=flow_nav_keyboard("q:back"),
     )
     await callback.answer()
 
@@ -137,7 +137,7 @@ async def handle_service_questionnaire_start(
         chat_id=callback.message.chat.id,
         prefer_message_id=callback.message.message_id,
         text=text,
-        reply_markup=flow_nav_keyboard(None),
+        reply_markup=flow_nav_keyboard("q:back"),
     )
     await callback.answer()
 
@@ -249,7 +249,7 @@ async def handle_service_selection(
         chat_id=callback.message.chat.id,
         prefer_message_id=callback.message.message_id,
         text=text,
-        reply_markup=flow_nav_keyboard(None),
+        reply_markup=flow_nav_keyboard("q:back"),
     )
     await callback.answer()
 
@@ -340,7 +340,7 @@ async def handle_questionnaire_answer(
             total=len(questions),
             question=questions[index],
         ),
-        reply_markup=flow_nav_keyboard("q:back" if index > 0 else None),
+        reply_markup=flow_nav_keyboard("q:back"),
     )
 
 

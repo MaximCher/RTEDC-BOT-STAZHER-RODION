@@ -101,7 +101,7 @@ async def subsidy_calc_back(callback: CallbackQuery, state: FSMContext) -> None:
             total=len(_SUBSIDY_CALC_QUESTIONS),
             question=_SUBSIDY_CALC_QUESTIONS[new_step][1],
         ),
-        reply_markup=flow_nav_keyboard(None if new_step <= 0 else "subsidy:calc:back"),
+        reply_markup=flow_nav_keyboard("subsidy:calc:back"),
     )
     await callback.answer()
 
@@ -136,7 +136,7 @@ async def start_subsidy_calc(callback: CallbackQuery, state: FSMContext, session
             intro=msg("subsidy_calc_intro"),
             question=_SUBSIDY_CALC_QUESTIONS[0][1],
         ),
-        reply_markup=flow_nav_keyboard(None),
+        reply_markup=flow_nav_keyboard("subsidy:calc:back"),
     )
     await callback.answer()
 
@@ -172,7 +172,7 @@ async def handle_subsidy_calc_answer(message: Message, state: FSMContext, sessio
                     intro="Ошибка: не вижу сумму/диапазон в ₽. Пример: «3–5 млн ₽» или «2 500 000».",
                     question=q_text,
                 ),
-                reply_markup=flow_nav_keyboard("subsidy:calc:back" if step > 0 else None),
+                reply_markup=flow_nav_keyboard("subsidy:calc:back"),
             )
             return
 
@@ -206,7 +206,7 @@ async def handle_subsidy_calc_answer(message: Message, state: FSMContext, sessio
                 total=len(_SUBSIDY_CALC_QUESTIONS),
                 question=_SUBSIDY_CALC_QUESTIONS[step][1],
             ),
-            reply_markup=flow_nav_keyboard("subsidy:calc:back" if step > 0 else None),
+            reply_markup=flow_nav_keyboard("subsidy:calc:back"),
         )
         return
 

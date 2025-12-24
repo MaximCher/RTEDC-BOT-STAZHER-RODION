@@ -83,7 +83,7 @@ async def finance_calc_back(callback: CallbackQuery, state: FSMContext) -> None:
             total=len(_FIN_QUESTIONS),
             question=_FIN_QUESTIONS[new_step][1],
         ),
-        reply_markup=flow_nav_keyboard(None if new_step <= 0 else "finance:calc:back"),
+        reply_markup=flow_nav_keyboard("finance:calc:back"),
     )
     await callback.answer()
 
@@ -119,7 +119,7 @@ async def start_finance_calc(callback: CallbackQuery, state: FSMContext, session
         chat_id=callback.message.chat.id,
         prefer_message_id=callback.message.message_id,
         text=text,
-        reply_markup=flow_nav_keyboard(None),
+        reply_markup=flow_nav_keyboard("finance:calc:back"),
     )
     await callback.answer()
 
@@ -155,7 +155,7 @@ async def handle_finance_calc_answer(message: Message, state: FSMContext, sessio
                     intro="Ошибка: не вижу сумму. Пример: «25 млн ₽» или «12 500 000».",
                     question=q_text,
                 ),
-                reply_markup=flow_nav_keyboard("finance:calc:back" if step > 0 else None),
+                reply_markup=flow_nav_keyboard("finance:calc:back"),
             )
             return
     if key == "rate" and text.lower() not in {"не знаю", "незнаю", "не знаю.", "нет"}:
@@ -171,7 +171,7 @@ async def handle_finance_calc_answer(message: Message, state: FSMContext, sessio
                     intro="Ошибка: не вижу % ставку. Пример: «18%» или «16.5».",
                     question=q_text,
                 ),
-                reply_markup=flow_nav_keyboard("finance:calc:back" if step > 0 else None),
+                reply_markup=flow_nav_keyboard("finance:calc:back"),
             )
             return
     if key == "term":
@@ -187,7 +187,7 @@ async def handle_finance_calc_answer(message: Message, state: FSMContext, sessio
                     intro="Ошибка: не вижу срок. Пример: «36 мес» или «3 года».",
                     question=q_text,
                 ),
-                reply_markup=flow_nav_keyboard("finance:calc:back" if step > 0 else None),
+                reply_markup=flow_nav_keyboard("finance:calc:back"),
             )
             return
 
@@ -221,7 +221,7 @@ async def handle_finance_calc_answer(message: Message, state: FSMContext, sessio
                 total=len(_FIN_QUESTIONS),
                 question=_FIN_QUESTIONS[step][1],
             ),
-            reply_markup=flow_nav_keyboard("finance:calc:back" if step > 0 else None),
+            reply_markup=flow_nav_keyboard("finance:calc:back"),
         )
         return
 

@@ -74,7 +74,7 @@ async def payments_precheck_back(callback: CallbackQuery, state: FSMContext) -> 
             total=len(_PAYMENTS_QUESTIONS),
             question=_PAYMENTS_QUESTIONS[new_step][1],
         ),
-        reply_markup=flow_nav_keyboard(None if new_step <= 0 else "payments:precheck:back"),
+        reply_markup=flow_nav_keyboard("payments:precheck:back"),
     )
     await callback.answer()
 
@@ -109,7 +109,7 @@ async def start_payments_precheck(callback: CallbackQuery, state: FSMContext, se
             intro="Ок, быстро уточню детали и передам менеджеру SRVT. Это займёт ~1 минуту.",
             question=_PAYMENTS_QUESTIONS[0][1],
         ),
-        reply_markup=flow_nav_keyboard(None),
+        reply_markup=flow_nav_keyboard("payments:precheck:back"),
     )
     await callback.answer()
 
@@ -142,7 +142,7 @@ async def handle_payments_precheck_answer(message: Message, state: FSMContext, s
                 intro="Ошибка: не вижу сумму. Пример: «25 000 USD» или «1,2 млн ₽».",
                 question=q_text,
             ),
-            reply_markup=flow_nav_keyboard("payments:precheck:back" if step > 0 else None),
+            reply_markup=flow_nav_keyboard("payments:precheck:back"),
         )
         return
 
@@ -176,7 +176,7 @@ async def handle_payments_precheck_answer(message: Message, state: FSMContext, s
                 total=len(_PAYMENTS_QUESTIONS),
                 question=_PAYMENTS_QUESTIONS[step][1],
             ),
-            reply_markup=flow_nav_keyboard("payments:precheck:back" if step > 0 else None),
+            reply_markup=flow_nav_keyboard("payments:precheck:back"),
         )
         return
 

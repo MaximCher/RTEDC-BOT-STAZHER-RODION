@@ -33,6 +33,16 @@ class LeadForm(StatesGroup):
 @router.callback_query(F.data == "lead:back")
 async def lead_back(callback: CallbackQuery, state: FSMContext) -> None:
     current = await state.get_state()
+    if current == LeadForm.waiting_for_contact_data.state:
+        # "Back" on the first step == exit to menu
+        await state.clear()
+        try:
+            await callback.message.edit_text(msg("choose_service"), reply_markup=services_keyboard())
+        except Exception:
+            await callback.message.answer(msg("choose_service"), reply_markup=services_keyboard())
+        await callback.answer()
+        return
+
     if current != LeadForm.waiting_for_meeting_window.state:
         await callback.answer()
         return
@@ -58,7 +68,7 @@ async def lead_back(callback: CallbackQuery, state: FSMContext) -> None:
         chat_id=callback.message.chat.id,
         prefer_message_id=callback.message.message_id,
         text=format_step(title="SRVT • Заявка", step=1, total=2, question=msg("lead_contact_request")),
-        reply_markup=flow_nav_keyboard(None),
+        reply_markup=flow_nav_keyboard("lead:back"),
     )
     await callback.answer()
 
@@ -87,7 +97,7 @@ async def lead_start(callback: CallbackQuery, state: FSMContext, session: AsyncS
             total=2,
             question=msg("lead_contact_request"),
         ),
-        reply_markup=flow_nav_keyboard(None),
+        reply_markup=flow_nav_keyboard("lead:back"),
     )
     await callback.answer()
 
@@ -120,7 +130,7 @@ async def lead_process_contact(
                 intro="Ошибка: не вижу телефон. Пример: Иванов Иван +79991234567",
                 question=msg("lead_contact_request"),
             ),
-            reply_markup=flow_nav_keyboard(None),
+            reply_markup=flow_nav_keyboard("lead:back"),
         )
         return
 

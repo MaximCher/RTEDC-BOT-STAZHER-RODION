@@ -70,7 +70,7 @@ async def club_apply_back(callback: CallbackQuery, state: FSMContext) -> None:
             total=len(_CLUB_QUESTIONS),
             question=_CLUB_QUESTIONS[new_step][1],
         ),
-        reply_markup=flow_nav_keyboard(None if new_step <= 0 else "club:apply:back"),
+        reply_markup=flow_nav_keyboard("club:apply:back"),
     )
     await callback.answer()
 
@@ -105,7 +105,7 @@ async def start_club_apply(callback: CallbackQuery, state: FSMContext, session: 
             intro="Ок, быстро уточню детали и передам менеджеру SRVT. Это займёт ~1 минуту.",
             question=_CLUB_QUESTIONS[0][1],
         ),
-        reply_markup=flow_nav_keyboard(None),
+        reply_markup=flow_nav_keyboard("club:apply:back"),
     )
     await callback.answer()
 
@@ -155,7 +155,7 @@ async def handle_club_apply_answer(message: Message, state: FSMContext, session:
                 total=len(_CLUB_QUESTIONS),
                 question=_CLUB_QUESTIONS[step][1],
             ),
-            reply_markup=flow_nav_keyboard("club:apply:back" if step > 0 else None),
+            reply_markup=flow_nav_keyboard("club:apply:back"),
         )
         return
 

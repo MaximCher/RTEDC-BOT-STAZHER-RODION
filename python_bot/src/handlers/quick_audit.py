@@ -69,7 +69,7 @@ async def quick_audit_back(callback: CallbackQuery, state: FSMContext) -> None:
             total=len(_QA_QUESTIONS),
             question=_QA_QUESTIONS[new_step][1],
         ),
-        reply_markup=flow_nav_keyboard(None if new_step <= 0 else "audit:quick:back"),
+        reply_markup=flow_nav_keyboard("audit:quick:back"),
     )
     await callback.answer()
 
@@ -104,7 +104,7 @@ async def start_quick_audit(callback: CallbackQuery, state: FSMContext, session:
             intro="Ок, сделаем быстрый аудит по ИНН. Это займёт ~1 минуту.",
             question=_QA_QUESTIONS[0][1],
         ),
-        reply_markup=flow_nav_keyboard(None),
+        reply_markup=flow_nav_keyboard("audit:quick:back"),
     )
     await callback.answer()
 
@@ -139,7 +139,7 @@ async def handle_quick_audit_answer(message: Message, state: FSMContext, session
                     intro="Ошибка: не вижу ИНН. Пришлите 10 или 12 цифр (без пробелов).",
                     question=q_text,
                 ),
-                reply_markup=flow_nav_keyboard("audit:quick:back" if step > 0 else None),
+                reply_markup=flow_nav_keyboard("audit:quick:back"),
             )
             return
         text = m.group(0)
@@ -173,7 +173,7 @@ async def handle_quick_audit_answer(message: Message, state: FSMContext, session
                 total=len(_QA_QUESTIONS),
                 question=_QA_QUESTIONS[step][1],
             ),
-            reply_markup=flow_nav_keyboard("audit:quick:back" if step > 0 else None),
+            reply_markup=flow_nav_keyboard("audit:quick:back"),
         )
         return
 

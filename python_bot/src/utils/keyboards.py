@@ -12,24 +12,17 @@ def services_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def back_to_menu_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:root")]
-        ]
-    )
-
-
 def flow_nav_keyboard(back_callback_data: str | None = None) -> InlineKeyboardMarkup:
     """
     Navigation keyboard for multi-step flows.
-    - If back_callback_data is provided: show "Назад" + "В меню" in one row.
-    - Otherwise: show only "В меню".
+    We prefer a consistent UX: show "Назад" + "В меню".
+    If back_callback_data is not provided, "Назад" will behave as "В меню".
     """
-    row = []
-    if back_callback_data:
-        row.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=back_callback_data))
-    row.append(InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:root"))
+    back_cb = back_callback_data or "menu:root"
+    row = [
+        InlineKeyboardButton(text="⬅️ Назад", callback_data=back_cb),
+        InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:root"),
+    ]
     return InlineKeyboardMarkup(inline_keyboard=[row])
 
 

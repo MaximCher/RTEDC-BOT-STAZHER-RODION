@@ -68,7 +68,7 @@ async def analytics_report_back(callback: CallbackQuery, state: FSMContext) -> N
             total=len(_AN_QUESTIONS),
             question=_AN_QUESTIONS[new_step][1],
         ),
-        reply_markup=flow_nav_keyboard(None if new_step <= 0 else "analytics:report:back"),
+        reply_markup=flow_nav_keyboard("analytics:report:back"),
     )
     await callback.answer()
 
@@ -103,7 +103,7 @@ async def start_analytics_report(callback: CallbackQuery, state: FSMContext, ses
             intro="Ок, соберу вводные для аналитического отчёта SRVT. Это займёт ~1 минуту.",
             question=_AN_QUESTIONS[0][1],
         ),
-        reply_markup=flow_nav_keyboard(None),
+        reply_markup=flow_nav_keyboard("analytics:report:back"),
     )
     await callback.answer()
 
@@ -153,7 +153,7 @@ async def handle_analytics_report_answer(message: Message, state: FSMContext, se
                 total=len(_AN_QUESTIONS),
                 question=_AN_QUESTIONS[step][1],
             ),
-            reply_markup=flow_nav_keyboard("analytics:report:back" if step > 0 else None),
+            reply_markup=flow_nav_keyboard("analytics:report:back"),
         )
         return
 

@@ -72,7 +72,7 @@ async def logistics_quote_back(callback: CallbackQuery, state: FSMContext) -> No
             total=len(_LOG_QUESTIONS),
             question=_LOG_QUESTIONS[new_step][1],
         ),
-        reply_markup=flow_nav_keyboard(None if new_step <= 0 else "logistics:quote:back"),
+        reply_markup=flow_nav_keyboard("logistics:quote:back"),
     )
     await callback.answer()
 
@@ -107,7 +107,7 @@ async def start_logistics_quote(callback: CallbackQuery, state: FSMContext, sess
             intro="Ок, соберу вводные для расчёта логистики SRVT. Это займёт ~1 минуту.",
             question=_LOG_QUESTIONS[0][1],
         ),
-        reply_markup=flow_nav_keyboard(None),
+        reply_markup=flow_nav_keyboard("logistics:quote:back"),
     )
     await callback.answer()
 
