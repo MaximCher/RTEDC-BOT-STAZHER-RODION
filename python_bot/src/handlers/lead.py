@@ -47,6 +47,7 @@ async def lead_back(callback: CallbackQuery, state: FSMContext) -> None:
             text=text,
             reply_markup=kb,
             parse_mode=pm,
+            keep_at_bottom=True,
         )
         await callback.answer()
         return
@@ -77,6 +78,7 @@ async def lead_back(callback: CallbackQuery, state: FSMContext) -> None:
         prefer_message_id=callback.message.message_id,
         text=format_step(title="SRVT • Заявка", step=1, total=2, question=msg("lead_contact_request")),
         reply_markup=flow_nav_keyboard("lead:back"),
+        keep_at_bottom=True,
     )
     await callback.answer()
 
@@ -106,6 +108,7 @@ async def lead_start(callback: CallbackQuery, state: FSMContext, session: AsyncS
             question=msg("lead_contact_request"),
         ),
         reply_markup=flow_nav_keyboard("lead:back"),
+        keep_at_bottom=True,
     )
     await callback.answer()
 
@@ -139,6 +142,7 @@ async def lead_process_contact(
                 question=msg("lead_contact_request"),
             ),
             reply_markup=flow_nav_keyboard("lead:back"),
+            keep_at_bottom=True,
         )
         return
 
@@ -151,6 +155,7 @@ async def lead_process_contact(
             text="Слишком много заявок за минуту. Пожалуйста, попробуйте чуть позже.",
             reply_markup=services_keyboard(),
             parse_mode=None,
+            keep_at_bottom=True,
         )
         return
     username = message.from_user.username
@@ -196,6 +201,7 @@ async def lead_process_contact(
             question=msg("lead_meeting_window_request"),
         ),
         reply_markup=meeting_window_keyboard(include_back=True),
+        keep_at_bottom=True,
     )
 
 
@@ -311,6 +317,7 @@ async def lead_process_meeting_window(
         text=msg("lead_received"),
         reply_markup=services_keyboard(),
         parse_mode=None,
+        keep_at_bottom=True,
     )
     await state.clear()
 
@@ -372,6 +379,7 @@ async def lead_meeting_window_pick(
         text=msg("lead_received"),
         reply_markup=services_keyboard(),
         parse_mode=None,
+        keep_at_bottom=True,
     )
     await state.clear()
     await callback.answer()

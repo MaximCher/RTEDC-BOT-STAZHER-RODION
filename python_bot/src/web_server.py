@@ -55,12 +55,10 @@ def create_app() -> FastAPI:
             db_ok = await check_db(session)
             bot = await check_bot_heartbeat(session)
 
-        openai_payload = {
-            "configured": bool(settings.openai_api_key),
-            "ok": False,
-        }
+        openai_payload = {"configured": bool(settings.openai_api_key), "checked": bool(checkOpenAI), "ok": None}
         if checkOpenAI:
             openai_payload = await check_openai()
+            openai_payload["checked"] = True
 
         overall = bool(db_ok and bot.get("ok"))
         return {

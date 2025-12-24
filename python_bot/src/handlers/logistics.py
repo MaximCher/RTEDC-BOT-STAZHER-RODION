@@ -59,6 +59,7 @@ async def logistics_quote_back(callback: CallbackQuery, state: FSMContext) -> No
             text=text,
             reply_markup=kb,
             parse_mode=pm,
+        keep_at_bottom=True,
         )
         await callback.answer()
         return
@@ -80,6 +81,7 @@ async def logistics_quote_back(callback: CallbackQuery, state: FSMContext) -> No
             question=_LOG_QUESTIONS[new_step][1],
         ),
         reply_markup=flow_nav_keyboard("logistics:quote:back"),
+        keep_at_bottom=True,
     )
     await callback.answer()
 
@@ -115,6 +117,7 @@ async def start_logistics_quote(callback: CallbackQuery, state: FSMContext, sess
             question=_LOG_QUESTIONS[0][1],
         ),
         reply_markup=flow_nav_keyboard("logistics:quote:back"),
+        keep_at_bottom=True,
     )
     await callback.answer()
 
@@ -147,7 +150,8 @@ async def handle_logistics_quote_answer(message: Message, state: FSMContext, ses
                 intro="Ошибка: не вижу цифры по весу/объёму. Пример: «1200 кг, 6 м³» или «10 мест».",
                 question=q_text,
             ),
-            reply_markup=flow_nav_keyboard("logistics:quote:back" if step > 0 else None),
+            reply_markup=flow_nav_keyboard("logistics:quote:back"),
+            keep_at_bottom=True,
         )
         return
 
@@ -180,7 +184,8 @@ async def handle_logistics_quote_answer(message: Message, state: FSMContext, ses
                 total=len(_LOG_QUESTIONS),
                 question=_LOG_QUESTIONS[step][1],
             ),
-            reply_markup=flow_nav_keyboard("logistics:quote:back" if step > 0 else None),
+            reply_markup=flow_nav_keyboard("logistics:quote:back"),
+            keep_at_bottom=True,
         )
         return
 
@@ -218,6 +223,7 @@ async def handle_logistics_quote_answer(message: Message, state: FSMContext, ses
         text=result,
         reply_markup=lead_actions_keyboard(service_key),
         parse_mode=None,
+        keep_at_bottom=True,
     )
 
 

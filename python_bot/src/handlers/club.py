@@ -57,6 +57,7 @@ async def club_apply_back(callback: CallbackQuery, state: FSMContext) -> None:
             text=text,
             reply_markup=kb,
             parse_mode=pm,
+            keep_at_bottom=True,
         )
         await callback.answer()
         return
@@ -78,6 +79,7 @@ async def club_apply_back(callback: CallbackQuery, state: FSMContext) -> None:
             question=_CLUB_QUESTIONS[new_step][1],
         ),
         reply_markup=flow_nav_keyboard("club:apply:back"),
+        keep_at_bottom=True,
     )
     await callback.answer()
 
@@ -113,6 +115,7 @@ async def start_club_apply(callback: CallbackQuery, state: FSMContext, session: 
             question=_CLUB_QUESTIONS[0][1],
         ),
         reply_markup=flow_nav_keyboard("club:apply:back"),
+        keep_at_bottom=True,
     )
     await callback.answer()
 
@@ -163,6 +166,7 @@ async def handle_club_apply_answer(message: Message, state: FSMContext, session:
                 question=_CLUB_QUESTIONS[step][1],
             ),
             reply_markup=flow_nav_keyboard("club:apply:back"),
+            keep_at_bottom=True,
         )
         return
 
@@ -200,6 +204,7 @@ async def handle_club_apply_answer(message: Message, state: FSMContext, session:
         text=result,
         reply_markup=lead_actions_keyboard(service_key),
         parse_mode=None,
+        keep_at_bottom=True,
     )
 
 

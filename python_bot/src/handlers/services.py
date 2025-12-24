@@ -68,6 +68,7 @@ async def questionnaire_back(callback: CallbackQuery, state: FSMContext) -> None
             text=text,
             reply_markup=kb,
             parse_mode=pm,
+            keep_at_bottom=True,
         )
         await callback.answer()
         return
@@ -89,6 +90,7 @@ async def questionnaire_back(callback: CallbackQuery, state: FSMContext) -> None
             question=questions[new_index],
         ),
         reply_markup=flow_nav_keyboard("q:back"),
+        keep_at_bottom=True,
     )
     await callback.answer()
 
@@ -145,6 +147,7 @@ async def handle_service_questionnaire_start(
         prefer_message_id=callback.message.message_id,
         text=text,
         reply_markup=flow_nav_keyboard("q:back"),
+        keep_at_bottom=True,
     )
     await callback.answer()
 
@@ -257,6 +260,7 @@ async def handle_service_selection(
         prefer_message_id=callback.message.message_id,
         text=text,
         reply_markup=flow_nav_keyboard("q:back"),
+        keep_at_bottom=True,
     )
     await callback.answer()
 
@@ -333,6 +337,7 @@ async def handle_questionnaire_answer(
             text=flow["final_text"],
             reply_markup=lead_actions_keyboard(service_key),
             parse_mode=None,
+            keep_at_bottom=True,
         )
         return
 
@@ -348,6 +353,7 @@ async def handle_questionnaire_answer(
             question=questions[index],
         ),
         reply_markup=flow_nav_keyboard("q:back"),
+        keep_at_bottom=True,
     )
 
 

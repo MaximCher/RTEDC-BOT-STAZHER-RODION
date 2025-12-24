@@ -55,6 +55,7 @@ async def analytics_report_back(callback: CallbackQuery, state: FSMContext) -> N
             text=text,
             reply_markup=kb,
             parse_mode=pm,
+            keep_at_bottom=True,
         )
         await callback.answer()
         return
@@ -76,6 +77,7 @@ async def analytics_report_back(callback: CallbackQuery, state: FSMContext) -> N
             question=_AN_QUESTIONS[new_step][1],
         ),
         reply_markup=flow_nav_keyboard("analytics:report:back"),
+        keep_at_bottom=True,
     )
     await callback.answer()
 
@@ -111,6 +113,7 @@ async def start_analytics_report(callback: CallbackQuery, state: FSMContext, ses
             question=_AN_QUESTIONS[0][1],
         ),
         reply_markup=flow_nav_keyboard("analytics:report:back"),
+        keep_at_bottom=True,
     )
     await callback.answer()
 
@@ -161,6 +164,7 @@ async def handle_analytics_report_answer(message: Message, state: FSMContext, se
                 question=_AN_QUESTIONS[step][1],
             ),
             reply_markup=flow_nav_keyboard("analytics:report:back"),
+            keep_at_bottom=True,
         )
         return
 
@@ -196,6 +200,7 @@ async def handle_analytics_report_answer(message: Message, state: FSMContext, se
         text=result,
         reply_markup=lead_actions_keyboard(service_key),
         parse_mode=None,
+        keep_at_bottom=True,
     )
 
 

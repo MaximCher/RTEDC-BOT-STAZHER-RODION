@@ -96,6 +96,7 @@ async def subsidy_calc_back(callback: CallbackQuery, state: FSMContext) -> None:
             text=text,
             reply_markup=kb,
             parse_mode=pm,
+            keep_at_bottom=True,
         )
         await callback.answer()
         return
@@ -117,6 +118,7 @@ async def subsidy_calc_back(callback: CallbackQuery, state: FSMContext) -> None:
             question=_SUBSIDY_CALC_QUESTIONS[new_step][1],
         ),
         reply_markup=flow_nav_keyboard("subsidy:calc:back"),
+        keep_at_bottom=True,
     )
     await callback.answer()
 
@@ -152,6 +154,7 @@ async def start_subsidy_calc(callback: CallbackQuery, state: FSMContext, session
             question=_SUBSIDY_CALC_QUESTIONS[0][1],
         ),
         reply_markup=flow_nav_keyboard("subsidy:calc:back"),
+        keep_at_bottom=True,
     )
     await callback.answer()
 
@@ -188,6 +191,7 @@ async def handle_subsidy_calc_answer(message: Message, state: FSMContext, sessio
                     question=q_text,
                 ),
                 reply_markup=flow_nav_keyboard("subsidy:calc:back"),
+                keep_at_bottom=True,
             )
             return
 
@@ -222,6 +226,7 @@ async def handle_subsidy_calc_answer(message: Message, state: FSMContext, sessio
                 question=_SUBSIDY_CALC_QUESTIONS[step][1],
             ),
             reply_markup=flow_nav_keyboard("subsidy:calc:back"),
+            keep_at_bottom=True,
         )
         return
 
@@ -270,6 +275,7 @@ async def handle_subsidy_calc_answer(message: Message, state: FSMContext, sessio
         text=result,
         reply_markup=lead_actions_keyboard("subsidies_financing"),
         parse_mode=None,
+        keep_at_bottom=True,
     )
 
 
@@ -293,6 +299,7 @@ async def start_subsidy_chat(callback: CallbackQuery, state: FSMContext) -> None
             ),
         ),
         reply_markup=flow_nav_keyboard("subsidy:chat:back"),
+        keep_at_bottom=True,
     )
     await callback.answer()
 
@@ -311,6 +318,7 @@ async def subsidy_chat_back(callback: CallbackQuery, state: FSMContext) -> None:
         text=text,
         reply_markup=subsidies_entry_keyboard(),
         parse_mode=None,
+        keep_at_bottom=True,
     )
     await callback.answer()
 
@@ -389,4 +397,5 @@ async def handle_subsidy_question(
         ),
         reply_markup=subsidy_chat_keyboard(service_key),
         parse_mode="HTML",
+        keep_at_bottom=True,
     )

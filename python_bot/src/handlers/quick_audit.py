@@ -56,6 +56,7 @@ async def quick_audit_back(callback: CallbackQuery, state: FSMContext) -> None:
             text=text,
             reply_markup=kb,
             parse_mode=pm,
+            keep_at_bottom=True,
         )
         await callback.answer()
         return
@@ -77,6 +78,7 @@ async def quick_audit_back(callback: CallbackQuery, state: FSMContext) -> None:
             question=_QA_QUESTIONS[new_step][1],
         ),
         reply_markup=flow_nav_keyboard("audit:quick:back"),
+        keep_at_bottom=True,
     )
     await callback.answer()
 
@@ -112,6 +114,7 @@ async def start_quick_audit(callback: CallbackQuery, state: FSMContext, session:
             question=_QA_QUESTIONS[0][1],
         ),
         reply_markup=flow_nav_keyboard("audit:quick:back"),
+        keep_at_bottom=True,
     )
     await callback.answer()
 
@@ -147,6 +150,7 @@ async def handle_quick_audit_answer(message: Message, state: FSMContext, session
                     question=q_text,
                 ),
                 reply_markup=flow_nav_keyboard("audit:quick:back"),
+                keep_at_bottom=True,
             )
             return
         text = m.group(0)
@@ -181,6 +185,7 @@ async def handle_quick_audit_answer(message: Message, state: FSMContext, session
                 question=_QA_QUESTIONS[step][1],
             ),
             reply_markup=flow_nav_keyboard("audit:quick:back"),
+            keep_at_bottom=True,
         )
         return
 
@@ -215,4 +220,5 @@ async def handle_quick_audit_answer(message: Message, state: FSMContext, session
         text=result,
         reply_markup=lead_actions_keyboard(service_key),
         parse_mode=None,
+        keep_at_bottom=True,
     )
