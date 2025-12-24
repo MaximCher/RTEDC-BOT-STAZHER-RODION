@@ -19,7 +19,8 @@ from src.services.subsidy_calc import (
 )
 from src.utils.messages import msg
 from src.utils.funnel import log_event
-from src.utils.keyboards import lead_actions_keyboard
+from src.utils.keyboards import back_to_menu_keyboard, lead_actions_keyboard
+from src.utils.ui_flow import format_step, ui_upsert
 from src.vector_store import VectorStore
 
 router = Router()
@@ -82,8 +83,20 @@ async def start_subsidy_calc(callback: CallbackQuery, state: FSMContext, session
         service_key=service_key,
     )
 
-    await callback.message.answer(msg("subsidy_calc_intro"))
-    await callback.message.answer(_SUBSIDY_CALC_QUESTIONS[0][1])
+    await ui_upsert(
+        bot=callback.message.bot,
+        state=state,
+        chat_id=callback.message.chat.id,
+        prefer_message_id=callback.message.message_id,
+        text=format_step(
+            title="SRVT • Расчёт субсидии",
+            step=1,
+            total=len(_SUBSIDY_CALC_QUESTIONS),
+            intro=msg("subsidy_calc_intro"),
+            question=_SUBSIDY_CALC_QUESTIONS[0][1],
+        ),
+        reply_markup=back_to_menu_keyboard(),
+    )
     await callback.answer()
 
 
@@ -107,7 +120,19 @@ async def handle_subsidy_calc_answer(message: Message, state: FSMContext, sessio
     # Basic validation: budget must contain a number
     if key == "budget":
         if _first_money(text) is None:
-            await message.answer("Не вижу сумму/диапазон в ₽. Пример: «3–5 млн ₽» или «2 500 000»")
+            await ui_upsert(
+                bot=message.bot,
+                state=state,
+                chat_id=message.chat.id,
+                text=format_step(
+                    title="SRVT • Расчёт субсидии",
+                    step=step + 1,
+                    total=len(_SUBSIDY_CALC_QUESTIONS),
+                    intro="Ошибка: не вижу сумму/диапазон в ₽. Пример: «3–5 млн ₽» или «2 500 000».",
+                    question=q_text,
+                ),
+                reply_markup=back_to_menu_keyboard(),
+            )
             return
 
     answers[key] = text[:500]
@@ -130,7 +155,18 @@ async def handle_subsidy_calc_answer(message: Message, state: FSMContext, sessio
     await state.update_data(calc_step=step, calc_answers=answers)
 
     if step < len(_SUBSIDY_CALC_QUESTIONS):
-        await message.answer(_SUBSIDY_CALC_QUESTIONS[step][1])
+        await ui_upsert(
+            bot=message.bot,
+            state=state,
+            chat_id=message.chat.id,
+            text=format_step(
+                title="SRVT • Расчёт субсидии",
+                step=step + 1,
+                total=len(_SUBSIDY_CALC_QUESTIONS),
+                question=_SUBSIDY_CALC_QUESTIONS[step][1],
+            ),
+            reply_markup=back_to_menu_keyboard(),
+        )
         return
 
     # Complete: compute estimate using RAG context where possible
@@ -171,7 +207,14 @@ async def handle_subsidy_calc_answer(message: Message, state: FSMContext, sessio
     else:
         result = f"{msg('subsidy_calc_result_header')}\n\n{msg('subsidy_calc_no_context')}"
 
-    await message.answer(result, reply_markup=lead_actions_keyboard("subsidies_financing"))
+    await ui_upsert(
+        bot=message.bot,
+        state=state,
+        chat_id=message.chat.id,
+        text=result,
+        reply_markup=lead_actions_keyboard("subsidies_financing"),
+        parse_mode=None,
+    )
 
 
 @router.callback_query(F.data.startswith("subsidy:chat:start:"))

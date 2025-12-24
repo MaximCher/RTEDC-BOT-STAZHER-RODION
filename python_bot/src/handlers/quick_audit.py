@@ -12,7 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
 from src.utils.funnel import log_event
-from src.utils.keyboards import lead_actions_keyboard
+from src.utils.keyboards import back_to_menu_keyboard, lead_actions_keyboard
+from src.utils.ui_flow import format_step, ui_upsert
 
 router = Router()
 
@@ -49,8 +50,20 @@ async def start_quick_audit(callback: CallbackQuery, state: FSMContext, session:
         service_key=service_key,
     )
 
-    await callback.message.answer("Ок, сделаем быстрый аудит по ИНН. Это займёт ~1 минуту.")
-    await callback.message.answer(_QA_QUESTIONS[0][1])
+    await ui_upsert(
+        bot=callback.message.bot,
+        state=state,
+        chat_id=callback.message.chat.id,
+        prefer_message_id=callback.message.message_id,
+        text=format_step(
+            title="SRVT • Quick Audit по ИНН",
+            step=1,
+            total=len(_QA_QUESTIONS),
+            intro="Ок, сделаем быстрый аудит по ИНН. Это займёт ~1 минуту.",
+            question=_QA_QUESTIONS[0][1],
+        ),
+        reply_markup=back_to_menu_keyboard(),
+    )
     await callback.answer()
 
 
@@ -73,7 +86,19 @@ async def handle_quick_audit_answer(message: Message, state: FSMContext, session
     if key == "inn":
         m = _INN_RE.search(text)
         if not m:
-            await message.answer("Не вижу ИНН. Пришлите 10 или 12 цифр (без пробелов).")
+            await ui_upsert(
+                bot=message.bot,
+                state=state,
+                chat_id=message.chat.id,
+                text=format_step(
+                    title="SRVT • Quick Audit по ИНН",
+                    step=step + 1,
+                    total=len(_QA_QUESTIONS),
+                    intro="Ошибка: не вижу ИНН. Пришлите 10 или 12 цифр (без пробелов).",
+                    question=q_text,
+                ),
+                reply_markup=back_to_menu_keyboard(),
+            )
             return
         text = m.group(0)
 
@@ -96,7 +121,18 @@ async def handle_quick_audit_answer(message: Message, state: FSMContext, session
     await state.update_data(qa_step=step, qa_answers=answers)
 
     if step < len(_QA_QUESTIONS):
-        await message.answer(_QA_QUESTIONS[step][1])
+        await ui_upsert(
+            bot=message.bot,
+            state=state,
+            chat_id=message.chat.id,
+            text=format_step(
+                title="SRVT • Quick Audit по ИНН",
+                step=step + 1,
+                total=len(_QA_QUESTIONS),
+                question=_QA_QUESTIONS[step][1],
+            ),
+            reply_markup=back_to_menu_keyboard(),
+        )
         return
 
     result = (
@@ -123,4 +159,11 @@ async def handle_quick_audit_answer(message: Message, state: FSMContext, session
     await UserMemory.add_message(session, message.from_user.id, "system", summary_text)
     await state.update_data(questionnaire_summary=summary_text)
 
-    await message.answer(result, reply_markup=lead_actions_keyboard(service_key))
+    await ui_upsert(
+        bot=message.bot,
+        state=state,
+        chat_id=message.chat.id,
+        text=result,
+        reply_markup=lead_actions_keyboard(service_key),
+        parse_mode=None,
+    )

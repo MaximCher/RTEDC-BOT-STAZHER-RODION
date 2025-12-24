@@ -11,7 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
 from src.utils.funnel import log_event
-from src.utils.keyboards import lead_actions_keyboard
+from src.utils.keyboards import back_to_menu_keyboard, lead_actions_keyboard
+from src.utils.ui_flow import format_step, ui_upsert
 
 router = Router()
 
@@ -52,8 +53,20 @@ async def start_logistics_quote(callback: CallbackQuery, state: FSMContext, sess
         service_key=service_key,
     )
 
-    await callback.message.answer("Ок, соберу вводные для расчёта логистики SRVT. Это займёт ~1 минуту.")
-    await callback.message.answer(_LOG_QUESTIONS[0][1])
+    await ui_upsert(
+        bot=callback.message.bot,
+        state=state,
+        chat_id=callback.message.chat.id,
+        prefer_message_id=callback.message.message_id,
+        text=format_step(
+            title="SRVT • Логистика и ВЭД",
+            step=1,
+            total=len(_LOG_QUESTIONS),
+            intro="Ок, соберу вводные для расчёта логистики SRVT. Это займёт ~1 минуту.",
+            question=_LOG_QUESTIONS[0][1],
+        ),
+        reply_markup=back_to_menu_keyboard(),
+    )
     await callback.answer()
 
 
@@ -74,7 +87,19 @@ async def handle_logistics_quote_answer(message: Message, state: FSMContext, ses
 
     key, q_text = _LOG_QUESTIONS[step]
     if key == "dims" and not _has_any_digit(text):
-        await message.answer("Не вижу цифры по весу/объёму. Пример: «1200 кг, 6 м³» или «10 мест»")
+        await ui_upsert(
+            bot=message.bot,
+            state=state,
+            chat_id=message.chat.id,
+            text=format_step(
+                title="SRVT • Логистика и ВЭД",
+                step=step + 1,
+                total=len(_LOG_QUESTIONS),
+                intro="Ошибка: не вижу цифры по весу/объёму. Пример: «1200 кг, 6 м³» или «10 мест».",
+                question=q_text,
+            ),
+            reply_markup=back_to_menu_keyboard(),
+        )
         return
 
     answers[key] = text[:700]
@@ -96,7 +121,18 @@ async def handle_logistics_quote_answer(message: Message, state: FSMContext, ses
     await state.update_data(log_step=step, log_answers=answers)
 
     if step < len(_LOG_QUESTIONS):
-        await message.answer(_LOG_QUESTIONS[step][1])
+        await ui_upsert(
+            bot=message.bot,
+            state=state,
+            chat_id=message.chat.id,
+            text=format_step(
+                title="SRVT • Логистика и ВЭД",
+                step=step + 1,
+                total=len(_LOG_QUESTIONS),
+                question=_LOG_QUESTIONS[step][1],
+            ),
+            reply_markup=back_to_menu_keyboard(),
+        )
         return
 
     result = (
@@ -126,6 +162,13 @@ async def handle_logistics_quote_answer(message: Message, state: FSMContext, ses
     await UserMemory.add_message(session, message.from_user.id, "system", summary_text)
     await state.update_data(questionnaire_summary=summary_text)
 
-    await message.answer(result, reply_markup=lead_actions_keyboard(service_key))
+    await ui_upsert(
+        bot=message.bot,
+        state=state,
+        chat_id=message.chat.id,
+        text=result,
+        reply_markup=lead_actions_keyboard(service_key),
+        parse_mode=None,
+    )
 
 

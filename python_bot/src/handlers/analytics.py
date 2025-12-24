@@ -11,7 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
 from src.utils.funnel import log_event
-from src.utils.keyboards import lead_actions_keyboard
+from src.utils.keyboards import back_to_menu_keyboard, lead_actions_keyboard
+from src.utils.ui_flow import format_step, ui_upsert
 
 
 router = Router()
@@ -48,8 +49,20 @@ async def start_analytics_report(callback: CallbackQuery, state: FSMContext, ses
         service_key=service_key,
     )
 
-    await callback.message.answer("Ок, соберу вводные для аналитического отчёта SRVT. Это займёт ~1 минуту.")
-    await callback.message.answer(_AN_QUESTIONS[0][1])
+    await ui_upsert(
+        bot=callback.message.bot,
+        state=state,
+        chat_id=callback.message.chat.id,
+        prefer_message_id=callback.message.message_id,
+        text=format_step(
+            title="SRVT • Аналитика / ТН ВЭД",
+            step=1,
+            total=len(_AN_QUESTIONS),
+            intro="Ок, соберу вводные для аналитического отчёта SRVT. Это займёт ~1 минуту.",
+            question=_AN_QUESTIONS[0][1],
+        ),
+        reply_markup=back_to_menu_keyboard(),
+    )
     await callback.answer()
 
 
@@ -88,7 +101,18 @@ async def handle_analytics_report_answer(message: Message, state: FSMContext, se
     await state.update_data(an_step=step, an_answers=answers)
 
     if step < len(_AN_QUESTIONS):
-        await message.answer(_AN_QUESTIONS[step][1])
+        await ui_upsert(
+            bot=message.bot,
+            state=state,
+            chat_id=message.chat.id,
+            text=format_step(
+                title="SRVT • Аналитика / ТН ВЭД",
+                step=step + 1,
+                total=len(_AN_QUESTIONS),
+                question=_AN_QUESTIONS[step][1],
+            ),
+            reply_markup=back_to_menu_keyboard(),
+        )
         return
 
     result = (
@@ -116,6 +140,13 @@ async def handle_analytics_report_answer(message: Message, state: FSMContext, se
     await UserMemory.add_message(session, message.from_user.id, "system", summary_text)
     await state.update_data(questionnaire_summary=summary_text)
 
-    await message.answer(result, reply_markup=lead_actions_keyboard(service_key))
+    await ui_upsert(
+        bot=message.bot,
+        state=state,
+        chat_id=message.chat.id,
+        text=result,
+        reply_markup=lead_actions_keyboard(service_key),
+        parse_mode=None,
+    )
 
 

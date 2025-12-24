@@ -13,10 +13,11 @@ from src.bitrix import BitrixClient
 from src.models.bitrix_lead import BitrixLead
 from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
-from src.utils.keyboards import meeting_window_keyboard, services_keyboard
+from src.utils.keyboards import back_to_menu_keyboard, meeting_window_keyboard, services_keyboard
 from src.utils.messages import msg
 from src.utils.rate_limit import FixedWindowRateLimiter
 from src.utils.funnel import log_event
+from src.utils.ui_flow import format_step, ui_upsert
 
 
 router = Router()
@@ -42,7 +43,19 @@ async def lead_start(callback: CallbackQuery, state: FSMContext, session: AsyncS
         event="cta_lead_start",
         service_key=service_key,
     )
-    await callback.message.answer(msg("lead_contact_request"))
+    await ui_upsert(
+        bot=callback.message.bot,
+        state=state,
+        chat_id=callback.message.chat.id,
+        prefer_message_id=callback.message.message_id,
+        text=format_step(
+            title="SRVT • Заявка",
+            step=1,
+            total=2,
+            question=msg("lead_contact_request"),
+        ),
+        reply_markup=back_to_menu_keyboard(),
+    )
     await callback.answer()
 
 
@@ -63,12 +76,31 @@ async def lead_process_contact(
 
     full_name, phone = parse_contact_data(text)
     if not phone:
-        await message.answer("Не вижу телефон. Пришлите, пожалуйста, в формате: Иванов Иван +79991234567")
+        await ui_upsert(
+            bot=message.bot,
+            state=state,
+            chat_id=message.chat.id,
+            text=format_step(
+                title="SRVT • Заявка",
+                step=1,
+                total=2,
+                intro="Ошибка: не вижу телефон. Пример: Иванов Иван +79991234567",
+                question=msg("lead_contact_request"),
+            ),
+            reply_markup=back_to_menu_keyboard(),
+        )
         return
 
     user_id = message.from_user.id
     if not _lead_rate_limiter.allow(str(user_id)):
-        await message.answer("Слишком много заявок за минуту. Пожалуйста, попробуйте чуть позже.")
+        await ui_upsert(
+            bot=message.bot,
+            state=state,
+            chat_id=message.chat.id,
+            text="Слишком много заявок за минуту. Пожалуйста, попробуйте чуть позже.",
+            reply_markup=services_keyboard(),
+            parse_mode=None,
+        )
         return
     username = message.from_user.username
 
@@ -102,7 +134,18 @@ async def lead_process_contact(
         event="contact_submitted",
         service_key=service_key,
     )
-    await message.answer(msg("lead_meeting_window_request"), reply_markup=meeting_window_keyboard())
+    await ui_upsert(
+        bot=message.bot,
+        state=state,
+        chat_id=message.chat.id,
+        text=format_step(
+            title="SRVT • Заявка",
+            step=2,
+            total=2,
+            question=msg("lead_meeting_window_request"),
+        ),
+        reply_markup=meeting_window_keyboard(),
+    )
 
 
 def _meeting_window_from_code(code: str) -> str:
@@ -210,7 +253,14 @@ async def lead_process_meeting_window(
         summary_text=summary_text,
         meeting_window=meeting_window,
     )
-    await message.answer(msg("lead_received"), reply_markup=services_keyboard())
+    await ui_upsert(
+        bot=message.bot,
+        state=state,
+        chat_id=message.chat.id,
+        text=msg("lead_received"),
+        reply_markup=services_keyboard(),
+        parse_mode=None,
+    )
     await state.clear()
 
 
@@ -263,7 +313,15 @@ async def lead_meeting_window_pick(
         meeting_window=meeting_window,
     )
 
-    await callback.message.answer(msg("lead_received"), reply_markup=services_keyboard())
+    await ui_upsert(
+        bot=callback.message.bot,
+        state=state,
+        chat_id=callback.message.chat.id,
+        prefer_message_id=callback.message.message_id,
+        text=msg("lead_received"),
+        reply_markup=services_keyboard(),
+        parse_mode=None,
+    )
     await state.clear()
     await callback.answer()
 

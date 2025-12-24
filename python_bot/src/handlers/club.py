@@ -11,7 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
 from src.utils.funnel import log_event
-from src.utils.keyboards import lead_actions_keyboard
+from src.utils.keyboards import back_to_menu_keyboard, lead_actions_keyboard
+from src.utils.ui_flow import format_step, ui_upsert
 
 router = Router()
 
@@ -50,8 +51,20 @@ async def start_club_apply(callback: CallbackQuery, state: FSMContext, session: 
         service_key=service_key,
     )
 
-    await callback.message.answer("Ок, быстро уточню детали и передам менеджеру SRVT. Это займёт ~1 минуту.")
-    await callback.message.answer(_CLUB_QUESTIONS[0][1])
+    await ui_upsert(
+        bot=callback.message.bot,
+        state=state,
+        chat_id=callback.message.chat.id,
+        prefer_message_id=callback.message.message_id,
+        text=format_step(
+            title="SRVT • Клуб / партнёрство",
+            step=1,
+            total=len(_CLUB_QUESTIONS),
+            intro="Ок, быстро уточню детали и передам менеджеру SRVT. Это займёт ~1 минуту.",
+            question=_CLUB_QUESTIONS[0][1],
+        ),
+        reply_markup=back_to_menu_keyboard(),
+    )
     await callback.answer()
 
 
@@ -90,7 +103,18 @@ async def handle_club_apply_answer(message: Message, state: FSMContext, session:
     await state.update_data(club_step=step, club_answers=answers)
 
     if step < len(_CLUB_QUESTIONS):
-        await message.answer(_CLUB_QUESTIONS[step][1])
+        await ui_upsert(
+            bot=message.bot,
+            state=state,
+            chat_id=message.chat.id,
+            text=format_step(
+                title="SRVT • Клуб / партнёрство",
+                step=step + 1,
+                total=len(_CLUB_QUESTIONS),
+                question=_CLUB_QUESTIONS[step][1],
+            ),
+            reply_markup=back_to_menu_keyboard(),
+        )
         return
 
     result = (
@@ -120,6 +144,13 @@ async def handle_club_apply_answer(message: Message, state: FSMContext, session:
     await UserMemory.add_message(session, message.from_user.id, "system", summary_text)
     await state.update_data(questionnaire_summary=summary_text)
 
-    await message.answer(result, reply_markup=lead_actions_keyboard(service_key))
+    await ui_upsert(
+        bot=message.bot,
+        state=state,
+        chat_id=message.chat.id,
+        text=result,
+        reply_markup=lead_actions_keyboard(service_key),
+        parse_mode=None,
+    )
 
 

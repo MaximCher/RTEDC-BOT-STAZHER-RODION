@@ -12,7 +12,8 @@ from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
 from src.services.subsidy_calc import parse_money_rub
 from src.utils.funnel import log_event
-from src.utils.keyboards import lead_actions_keyboard
+from src.utils.keyboards import back_to_menu_keyboard, lead_actions_keyboard
+from src.utils.ui_flow import format_step, ui_upsert
 
 router = Router()
 
@@ -54,8 +55,20 @@ async def start_payments_precheck(callback: CallbackQuery, state: FSMContext, se
         service_key=service_key,
     )
 
-    await callback.message.answer("Ок, быстро уточню детали и передам менеджеру SRVT. Это займёт ~1 минуту.")
-    await callback.message.answer(_PAYMENTS_QUESTIONS[0][1])
+    await ui_upsert(
+        bot=callback.message.bot,
+        state=state,
+        chat_id=callback.message.chat.id,
+        prefer_message_id=callback.message.message_id,
+        text=format_step(
+            title="SRVT • Международные платежи",
+            step=1,
+            total=len(_PAYMENTS_QUESTIONS),
+            intro="Ок, быстро уточню детали и передам менеджеру SRVT. Это займёт ~1 минуту.",
+            question=_PAYMENTS_QUESTIONS[0][1],
+        ),
+        reply_markup=back_to_menu_keyboard(),
+    )
     await callback.answer()
 
 
@@ -76,7 +89,19 @@ async def handle_payments_precheck_answer(message: Message, state: FSMContext, s
 
     key, q_text = _PAYMENTS_QUESTIONS[step]
     if key == "amount" and not _has_any_amount(text):
-        await message.answer("Не вижу сумму. Пример: «25 000 USD» или «1,2 млн ₽»")
+        await ui_upsert(
+            bot=message.bot,
+            state=state,
+            chat_id=message.chat.id,
+            text=format_step(
+                title="SRVT • Международные платежи",
+                step=step + 1,
+                total=len(_PAYMENTS_QUESTIONS),
+                intro="Ошибка: не вижу сумму. Пример: «25 000 USD» или «1,2 млн ₽».",
+                question=q_text,
+            ),
+            reply_markup=back_to_menu_keyboard(),
+        )
         return
 
     answers[key] = text[:600]
@@ -99,7 +124,18 @@ async def handle_payments_precheck_answer(message: Message, state: FSMContext, s
     await state.update_data(pay_step=step, pay_answers=answers)
 
     if step < len(_PAYMENTS_QUESTIONS):
-        await message.answer(_PAYMENTS_QUESTIONS[step][1])
+        await ui_upsert(
+            bot=message.bot,
+            state=state,
+            chat_id=message.chat.id,
+            text=format_step(
+                title="SRVT • Международные платежи",
+                step=step + 1,
+                total=len(_PAYMENTS_QUESTIONS),
+                question=_PAYMENTS_QUESTIONS[step][1],
+            ),
+            reply_markup=back_to_menu_keyboard(),
+        )
         return
 
     # Complete: produce a short plan and move to lead
@@ -139,6 +175,13 @@ async def handle_payments_precheck_answer(message: Message, state: FSMContext, s
     await UserMemory.add_message(session, message.from_user.id, "system", summary_text)
     await state.update_data(questionnaire_summary=summary_text)
 
-    await message.answer(plan, reply_markup=lead_actions_keyboard(service_key))
+    await ui_upsert(
+        bot=message.bot,
+        state=state,
+        chat_id=message.chat.id,
+        text=plan,
+        reply_markup=lead_actions_keyboard(service_key),
+        parse_mode=None,
+    )
 
 

@@ -13,8 +13,9 @@ from src.models.user_memory import UserMemory
 from src.services.finance_calc import estimate_refinance, parse_percent, parse_term_months
 from src.services.subsidy_calc import parse_money_rub
 from src.utils.funnel import log_event
-from src.utils.keyboards import lead_actions_keyboard
+from src.utils.keyboards import back_to_menu_keyboard, lead_actions_keyboard
 from src.utils.messages import msg
+from src.utils.ui_flow import format_step, ui_upsert
 
 
 router = Router()
@@ -63,10 +64,21 @@ async def start_finance_calc(callback: CallbackQuery, state: FSMContext, session
         service_key=service_key,
     )
 
-    await callback.message.answer(
-        "Ок, сделаю предварительный расчёт. Это займёт ~2 минуты. Отвечайте коротко."
+    text = format_step(
+        title="SRVT • Финансирование / рефинанс",
+        step=1,
+        total=len(_FIN_QUESTIONS),
+        intro="Ок, сделаю предварительный расчёт. Это займёт ~2 минуты. Отвечайте коротко.",
+        question=_FIN_QUESTIONS[0][1],
     )
-    await callback.message.answer(_FIN_QUESTIONS[0][1])
+    await ui_upsert(
+        bot=callback.message.bot,
+        state=state,
+        chat_id=callback.message.chat.id,
+        prefer_message_id=callback.message.message_id,
+        text=text,
+        reply_markup=back_to_menu_keyboard(),
+    )
     await callback.answer()
 
 
@@ -90,15 +102,51 @@ async def handle_finance_calc_answer(message: Message, state: FSMContext, sessio
     # validation
     if key == "amount":
         if _first_money(text) is None:
-            await message.answer("Не вижу сумму. Пример: «25 млн ₽» или «12 500 000»")
+            await ui_upsert(
+                bot=message.bot,
+                state=state,
+                chat_id=message.chat.id,
+                text=format_step(
+                    title="SRVT • Финансирование / рефинанс",
+                    step=step + 1,
+                    total=len(_FIN_QUESTIONS),
+                    intro="Ошибка: не вижу сумму. Пример: «25 млн ₽» или «12 500 000».",
+                    question=q_text,
+                ),
+                reply_markup=back_to_menu_keyboard(),
+            )
             return
     if key == "rate" and text.lower() not in {"не знаю", "незнаю", "не знаю.", "нет"}:
         if parse_percent(text) is None:
-            await message.answer("Не вижу % ставку. Пример: «18%» или «16.5» (проценты годовых)")
+            await ui_upsert(
+                bot=message.bot,
+                state=state,
+                chat_id=message.chat.id,
+                text=format_step(
+                    title="SRVT • Финансирование / рефинанс",
+                    step=step + 1,
+                    total=len(_FIN_QUESTIONS),
+                    intro="Ошибка: не вижу % ставку. Пример: «18%» или «16.5».",
+                    question=q_text,
+                ),
+                reply_markup=back_to_menu_keyboard(),
+            )
             return
     if key == "term":
         if parse_term_months(text) is None:
-            await message.answer("Не вижу срок. Пример: «36 мес» или «3 года»")
+            await ui_upsert(
+                bot=message.bot,
+                state=state,
+                chat_id=message.chat.id,
+                text=format_step(
+                    title="SRVT • Финансирование / рефинанс",
+                    step=step + 1,
+                    total=len(_FIN_QUESTIONS),
+                    intro="Ошибка: не вижу срок. Пример: «36 мес» или «3 года».",
+                    question=q_text,
+                ),
+                reply_markup=back_to_menu_keyboard(),
+            )
             return
 
     answers[key] = text[:500]
@@ -121,7 +169,18 @@ async def handle_finance_calc_answer(message: Message, state: FSMContext, sessio
     await state.update_data(fin_step=step, fin_answers=answers)
 
     if step < len(_FIN_QUESTIONS):
-        await message.answer(_FIN_QUESTIONS[step][1])
+        await ui_upsert(
+            bot=message.bot,
+            state=state,
+            chat_id=message.chat.id,
+            text=format_step(
+                title="SRVT • Финансирование / рефинанс",
+                step=step + 1,
+                total=len(_FIN_QUESTIONS),
+                question=_FIN_QUESTIONS[step][1],
+            ),
+            reply_markup=back_to_menu_keyboard(),
+        )
         return
 
     # Compute estimate (refi-focused, but still useful for new credit as "next steps")
@@ -169,6 +228,13 @@ async def handle_finance_calc_answer(message: Message, state: FSMContext, sessio
     await UserMemory.add_message(session, user_id, "system", summary_text)
     await state.update_data(questionnaire_summary=summary_text)
 
-    await message.answer(estimate_text, reply_markup=lead_actions_keyboard("subsidies_financing"))
+    await ui_upsert(
+        bot=message.bot,
+        state=state,
+        chat_id=message.chat.id,
+        text=estimate_text,
+        reply_markup=lead_actions_keyboard("subsidies_financing"),
+        parse_mode=None,
+    )
 
 

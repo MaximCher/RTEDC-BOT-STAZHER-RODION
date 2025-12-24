@@ -23,6 +23,7 @@ from src.utils.messages import msg
 from src.utils.funnel import log_event
 
 from src.config import SERVICE_FLOWS, SERVICES
+from src.utils.ui_flow import format_step, ui_upsert
 
 router = Router()
 
@@ -68,12 +69,22 @@ async def handle_service_questionnaire_start(
         service_key=service_key,
     )
 
-    text = f"{flow['description']}\n\n{flow['questions'][0]}"
-    # Prefer editing to avoid chat spam; fallback to sending.
-    try:
-        await callback.message.edit_text(text, reply_markup=back_to_menu_keyboard())
-    except Exception:
-        await callback.message.answer(text, reply_markup=back_to_menu_keyboard())
+    questions: List[str] = flow["questions"]
+    text = format_step(
+        title=f"SRVT • {SERVICES.get(service_key, service_key)}",
+        step=1,
+        total=len(questions),
+        intro=flow["description"],
+        question=questions[0],
+    )
+    await ui_upsert(
+        bot=callback.message.bot,
+        state=state,
+        chat_id=callback.message.chat.id,
+        prefer_message_id=callback.message.message_id,
+        text=text,
+        reply_markup=back_to_menu_keyboard(),
+    )
     await callback.answer()
 
 
@@ -170,8 +181,22 @@ async def handle_service_selection(
         questionnaire_answers=[],
     )
 
-    text = f"{flow['description']}\n\n{flow['questions'][0]}"
-    await callback.message.edit_text(text, reply_markup=back_to_menu_keyboard())
+    questions: List[str] = flow["questions"]
+    text = format_step(
+        title=f"SRVT • {SERVICES.get(service_key, service_key)}",
+        step=1,
+        total=len(questions),
+        intro=flow["description"],
+        question=questions[0],
+    )
+    await ui_upsert(
+        bot=callback.message.bot,
+        state=state,
+        chat_id=callback.message.chat.id,
+        prefer_message_id=callback.message.message_id,
+        text=text,
+        reply_markup=back_to_menu_keyboard(),
+    )
     await callback.answer()
 
 
@@ -240,10 +265,28 @@ async def handle_questionnaire_answer(
             event="questionnaire_complete",
             service_key=service_key,
         )
-        await message.answer(flow["final_text"], reply_markup=lead_actions_keyboard(service_key))
+        await ui_upsert(
+            bot=message.bot,
+            state=state,
+            chat_id=message.chat.id,
+            text=flow["final_text"],
+            reply_markup=lead_actions_keyboard(service_key),
+            parse_mode=None,
+        )
         return
 
     await state.update_data(questionnaire_index=index, questionnaire_answers=answers)
-    await message.answer(questions[index], reply_markup=back_to_menu_keyboard())
+    await ui_upsert(
+        bot=message.bot,
+        state=state,
+        chat_id=message.chat.id,
+        text=format_step(
+            title=f"SRVT • {SERVICES.get(service_key, service_key)}",
+            step=index + 1,
+            total=len(questions),
+            question=questions[index],
+        ),
+        reply_markup=back_to_menu_keyboard(),
+    )
 
 
