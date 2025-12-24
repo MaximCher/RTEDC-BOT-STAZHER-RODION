@@ -18,5 +18,8 @@ env/
 python_bot/.env
 python_bot/data/
 
+# Local secrets (do not commit)
+python_bot/.secrets/
+
 
 

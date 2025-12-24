@@ -1,0 +1,146 @@
+name: Deploy to VPS (Docker Compose)
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      wipe:
+        description: "WIPE=1 will remove containers + volumes (DB) before deploy"
+        required: false
+        default: "0"
+
+concurrency:
+  group: srvt-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+      WIPE: ${{ github.event.inputs.wipe || '0' }}
+      # App secrets (written to .env on the server)
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      MANAGER_CHAT_IDS: ${{ secrets.MANAGER_CHAT_IDS }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+      EMBEDDING_MODEL: ${{ secrets.EMBEDDING_MODEL }}
+      POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+      POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      BITRIX24_WEBHOOK_URL: ${{ secrets.BITRIX24_WEBHOOK_URL }}
+      BITRIX_RESPONSIBLE_DEFAULT_ID: ${{ secrets.BITRIX_RESPONSIBLE_DEFAULT_ID }}
+      BITRIX_DEFAULT_CATEGORY_ID: ${{ secrets.BITRIX_DEFAULT_CATEGORY_ID }}
+      BITRIX_UF_TG_ID: ${{ secrets.BITRIX_UF_TG_ID }}
+      BITRIX_UF_TG_USERNAME: ${{ secrets.BITRIX_UF_TG_USERNAME }}
+      BITRIX_UF_SERVICE_KEY: ${{ secrets.BITRIX_UF_SERVICE_KEY }}
+      ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+      WEB_SESSION_SECRET: ${{ secrets.WEB_SESSION_SECRET }}
+      WEBAPP_PUBLIC_URL: ${{ secrets.WEBAPP_PUBLIC_URL }}
+      ADMIN_USER_IDS: ${{ secrets.ADMIN_USER_IDS }}
+      LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
+      DEBUG_MODE: ${{ secrets.DEBUG_MODE }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Start SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+
+      - name: Add server to known_hosts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "${DEPLOY_PORT}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Rsync code to server (python_bot only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${DEPLOY_PATH:-}" ]; then
+            echo "DEPLOY_PATH is empty. Set GitHub Variable DEPLOY_PATH (e.g. /opt/srvt-bot)."
+            exit 1
+          fi
+          rsync -az --delete \
+            --exclude ".env" \
+            --exclude "data/" \
+            --exclude "__pycache__/" \
+            --exclude ".pytest_cache/" \
+            --exclude ".mypy_cache/" \
+            --exclude ".ruff_cache/" \
+            -e "ssh -p ${DEPLOY_PORT}" \
+            python_bot/ \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/python_bot/"
+
+      - name: Provision .env on server (from GitHub Secrets)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${TELEGRAM_BOT_TOKEN:-}" ]; then echo "Missing TELEGRAM_BOT_TOKEN secret"; exit 1; fi
+          if [ -z "${POSTGRES_PASSWORD:-}" ]; then echo "Missing POSTGRES_PASSWORD secret"; exit 1; fi
+          if [ -z "${ADMIN_PASSWORD:-}" ]; then echo "Missing ADMIN_PASSWORD secret"; exit 1; fi
+          if [ -z "${WEB_SESSION_SECRET:-}" ]; then echo "Missing WEB_SESSION_SECRET secret"; exit 1; fi
+
+          # Defaults if not provided as secrets
+          POSTGRES_DB="${POSTGRES_DB:-srvt_bot}"
+          POSTGRES_USER="${POSTGRES_USER:-srvt}"
+          OPENAI_MODEL="${OPENAI_MODEL:-gpt-4o-mini}"
+          EMBEDDING_MODEL="${EMBEDDING_MODEL:-text-embedding-3-small}"
+          LOG_LEVEL="${LOG_LEVEL:-INFO}"
+          DEBUG_MODE="${DEBUG_MODE:-false}"
+
+          ssh -p "${DEPLOY_PORT}" "${DEPLOY_USER}@${DEPLOY_HOST}" "bash -lc 'set -euo pipefail
+            cd \"${DEPLOY_PATH}/python_bot\"
+            cat > .env <<EOF
+TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+MANAGER_CHAT_IDS=${MANAGER_CHAT_IDS}
+
+POSTGRES_HOST=db
+POSTGRES_PORT=5432
+POSTGRES_DB=${POSTGRES_DB}
+POSTGRES_USER=${POSTGRES_USER}
+POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+
+OPENAI_API_KEY=${OPENAI_API_KEY}
+OPENAI_MODEL=${OPENAI_MODEL}
+EMBEDDING_MODEL=${EMBEDDING_MODEL}
+
+BITRIX24_WEBHOOK_URL=${BITRIX24_WEBHOOK_URL}
+BITRIX_RESPONSIBLE_DEFAULT_ID=${BITRIX_RESPONSIBLE_DEFAULT_ID}
+BITRIX_DEFAULT_CATEGORY_ID=${BITRIX_DEFAULT_CATEGORY_ID}
+BITRIX_UF_TG_ID=${BITRIX_UF_TG_ID}
+BITRIX_UF_TG_USERNAME=${BITRIX_UF_TG_USERNAME}
+BITRIX_UF_SERVICE_KEY=${BITRIX_UF_SERVICE_KEY}
+
+LOG_LEVEL=${LOG_LEVEL}
+DEBUG_MODE=${DEBUG_MODE}
+
+ADMIN_PASSWORD=${ADMIN_PASSWORD}
+WEB_SESSION_SECRET=${WEB_SESSION_SECRET}
+WEB_HOST=0.0.0.0
+WEB_PORT=8000
+
+WEBAPP_PUBLIC_URL=${WEBAPP_PUBLIC_URL}
+ADMIN_USER_IDS=${ADMIN_USER_IDS}
+EOF
+            chmod 600 .env
+          '"
+
+      - name: Deploy (docker compose prod)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "${DEPLOY_PORT}" "${DEPLOY_USER}@${DEPLOY_HOST}" "bash -lc 'set -euo pipefail
+            cd \"${DEPLOY_PATH}/python_bot\"
+            export WIPE=\"${WIPE}\"
+            bash ./scripts/deploy_remote.sh
+          '"
+
+

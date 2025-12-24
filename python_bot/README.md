@@ -83,3 +83,14 @@ docker compose exec bot python scripts/ingest_pdf_subsidies.py --pdf data/subsid
 docker compose -f docker-compose.prod.yml up -d --build
 curl http://localhost/health
 ```
+
+## CI/CD (GitHub Actions → VPS)
+
+В репозитории есть workflow `Deploy to VPS (Docker Compose)` (`.github/workflows/deploy.yml`).
+
+Идея: GitHub Actions по SSH‑ключу заливает папку `python_bot/` на сервер и запускает `docker compose -f docker-compose.prod.yml up -d --build`.
+
+На сервере нужно один раз:
+- установить Docker + Docker Compose plugin,
+- создать файл `python_bot/.env` (копия `env.template`),
+- (опционально) положить `data/subsidies.pdf` в `python_bot/data/` и сделать инжест.
