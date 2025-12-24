@@ -126,6 +126,21 @@ button.secondary:hover {
   margin: 10px 0 18px;
 }
 
+.chart-wrap {
+  position: relative;
+  height: 280px;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.chart-wrap.tall {
+  height: 340px;
+}
+
+.chart-note {
+  margin-top: 8px;
+}
+
 .stat.wide {
   grid-column: span 3;
 }

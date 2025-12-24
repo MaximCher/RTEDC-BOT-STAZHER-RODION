@@ -1,3 +1,3 @@
-"""Domain services (RAG helpers, calculators, parsers)."""
+"""Domain services (calculators, parsers, helpers)."""
 
 

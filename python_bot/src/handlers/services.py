@@ -9,8 +9,18 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
-from src.utils.keyboards import back_to_menu_keyboard, lead_actions_keyboard
+from src.utils.keyboards import (
+    analytics_entry_keyboard,
+    back_to_menu_keyboard,
+    club_entry_keyboard,
+    lead_actions_keyboard,
+    logistics_entry_keyboard,
+    payments_entry_keyboard,
+    quick_audit_entry_keyboard,
+    subsidies_entry_keyboard,
+)
 from src.utils.messages import msg
+from src.utils.funnel import log_event
 
 from src.config import SERVICE_FLOWS, SERVICES
 
@@ -19,6 +29,49 @@ router = Router()
 
 class ServiceQuestionnaire(StatesGroup):
     waiting_for_answer = State()
+
+
+@router.callback_query(F.data.startswith("service:questionnaire:"))
+async def handle_service_questionnaire_start(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    raw = callback.data or ""
+    service_key = raw.split("service:questionnaire:", 1)[-1].strip()
+
+    flow = SERVICE_FLOWS.get(service_key)
+    if not flow:
+        await callback.answer(msg("unknown_service"), show_alert=True)
+        return
+
+    user_id = callback.from_user.id
+    await UserMemory.update_user_data(session, user_id, selected_service=service_key)
+    await UserMemory.add_message(
+        session,
+        user_id,
+        "system",
+        f"Клиент начал анкету по направлению: {SERVICES.get(service_key, service_key)}",
+    )
+
+    await state.set_state(ServiceQuestionnaire.waiting_for_answer)
+    await state.update_data(
+        selected_service=service_key,
+        questionnaire_index=0,
+        questionnaire_answers=[],
+    )
+
+    await log_event(
+        session,
+        user_id=callback.from_user.id,
+        chat_id=callback.message.chat.id,
+        username=callback.from_user.username,
+        event="questionnaire_start",
+        service_key=service_key,
+    )
+
+    text = f"{flow['description']}\n\n{flow['questions'][0]}"
+    # Send new message (don't rely on edit_text for all contexts)
+    await callback.message.answer(text, reply_markup=back_to_menu_keyboard())
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("service:"))
@@ -42,6 +95,52 @@ async def handle_service_selection(
         "system",
         f"Клиент выбрал направление: {SERVICES.get(service_key, service_key)}",
     )
+
+    await log_event(
+        session,
+        user_id=callback.from_user.id,
+        chat_id=callback.message.chat.id,
+        username=callback.from_user.username,
+        event="entry_service",
+        service_key=service_key,
+    )
+
+    # Special SRVT-style entry for subsidies/financing: calculators and quick actions first.
+    if service_key == "subsidies_financing":
+        await state.clear()
+        await callback.message.answer(flow["description"], reply_markup=subsidies_entry_keyboard())
+        await callback.answer()
+        return
+
+    if service_key == "international_payments":
+        await state.clear()
+        await callback.message.answer(flow["description"], reply_markup=payments_entry_keyboard())
+        await callback.answer()
+        return
+
+    if service_key == "logistics_ved":
+        await state.clear()
+        await callback.message.answer(flow["description"], reply_markup=logistics_entry_keyboard())
+        await callback.answer()
+        return
+
+    if service_key == "analytics_tnved":
+        await state.clear()
+        await callback.message.answer(flow["description"], reply_markup=analytics_entry_keyboard())
+        await callback.answer()
+        return
+
+    if service_key == "quick_audit_inn":
+        await state.clear()
+        await callback.message.answer(flow["description"], reply_markup=quick_audit_entry_keyboard())
+        await callback.answer()
+        return
+
+    if service_key == "club_partnership":
+        await state.clear()
+        await callback.message.answer(flow["description"], reply_markup=club_entry_keyboard())
+        await callback.answer()
+        return
 
     await state.set_state(ServiceQuestionnaire.waiting_for_answer)
     await state.update_data(
@@ -104,13 +203,21 @@ async def handle_questionnaire_answer(
             summary_lines.append(f"{item['question']}\nОтвет: {item['answer']}")
         summary_text = "\n\n".join(summary_lines)
 
-        # Persist summary to user memory for future RAG / lead generation
+        # Persist summary to user memory for future lead generation
         await UserMemory.add_message(session, user_id, "system", summary_text)
 
         await state.update_data(
             questionnaire_index=index,
             questionnaire_answers=answers,
             questionnaire_summary=summary_text,
+        )
+        await log_event(
+            session,
+            user_id=user_id,
+            chat_id=message.chat.id,
+            username=message.from_user.username,
+            event="questionnaire_complete",
+            service_key=service_key,
         )
         await message.answer(flow["final_text"], reply_markup=lead_actions_keyboard(service_key))
         return

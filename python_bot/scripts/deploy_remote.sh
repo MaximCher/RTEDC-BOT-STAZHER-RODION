@@ -38,6 +38,19 @@ fi
 # Build + restart services
 docker compose -f "${COMPOSE_FILE}" up -d --build --remove-orphans
 
+# Nginx can show transient 502 if it starts before web is ready.
+# Wait for web /health (best-effort) then restart nginx to refresh upstream.
+echo "Waiting for web to become healthy..."
+for i in $(seq 1 15); do
+  if docker compose -f "${COMPOSE_FILE}" exec -T web curl -sf http://127.0.0.1:8000/health >/dev/null 2>&1; then
+    echo "Web is healthy."
+    break
+  fi
+  sleep 2
+done
+echo "Restarting nginx to refresh upstream..."
+docker compose -f "${COMPOSE_FILE}" restart nginx >/dev/null 2>&1 || true
+
 # Cleanup: prevent disk from filling with old images.
 # 1) Always prune dangling images (old image IDs left after a rebuild) — safe.
 echo "Pruning dangling images..."

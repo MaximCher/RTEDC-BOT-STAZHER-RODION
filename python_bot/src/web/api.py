@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 import csv
 import io
+import json
 from typing import Any, Dict, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -213,6 +214,142 @@ def register_api(app: FastAPI) -> None:
             "conversion_rate": round(conversion, 4),
             "leads_by_service": leads_by_service,
             "users_by_service": users_by_service,
+        }
+
+    def _parse_event(message_text: str) -> Optional[Dict[str, Any]]:
+        if not message_text or not message_text.startswith("event:"):
+            return None
+        raw = message_text.split("event:", 1)[-1].strip()
+        if not raw:
+            return None
+        try:
+            return json.loads(raw)
+        except Exception:
+            return None
+
+    def _pct(n: int, d: int) -> float:
+        if d <= 0:
+            return 0.0
+        return round(float(n) / float(d), 4)
+
+    @app.get("/api/funnel")
+    async def get_funnel(
+        request: Request,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        session: AsyncSession = Depends(_get_session),
+        _: None = Depends(require_auth),
+    ) -> Dict[str, Any]:
+        """
+        Funnel metrics based on role='event' rows in dialog_messages.
+        Counts are UNIQUE USERS per step (user_id distinct).
+        """
+        start_dt, end_dt = _range_bounds(start_date, end_date)
+
+        q = select(DialogMessage.user_id, DialogMessage.message_text).where(DialogMessage.role == "event")
+        if start_dt is not None:
+            q = q.where(DialogMessage.created_at >= start_dt)
+        if end_dt is not None:
+            q = q.where(DialogMessage.created_at < end_dt)
+
+        res = await session.execute(q)
+        rows = res.all()
+
+        # Normalized steps for all services
+        steps = [
+            "entry_service",
+            "engagement_start",
+            "engagement_complete",
+            "cta_lead_start",
+            "contact_submitted",
+            "meeting_window",
+            "lead_created",
+        ]
+
+        # Map raw events to normalized steps
+        engagement_start_events = {
+            "subsidy_calc_start",
+            "finance_calc_start",
+            "payments_precheck_start",
+            "logistics_quote_start",
+            "analytics_report_start",
+            "quick_audit_start",
+            "club_apply_start",
+            "questionnaire_start",
+        }
+        engagement_complete_events = {
+            "subsidy_calc_complete",
+            "finance_calc_complete",
+            "payments_precheck_complete",
+            "logistics_quote_complete",
+            "analytics_report_complete",
+            "quick_audit_complete",
+            "club_apply_complete",
+            "questionnaire_complete",
+        }
+        meeting_window_events = {"meeting_window_selected", "meeting_window_submitted"}
+
+        # service -> step -> set(user_id)
+        by_service: Dict[str, Dict[str, set[int]]] = {}
+        overall: Dict[str, set[int]] = {s: set() for s in steps}
+
+        for user_id, message_text in rows:
+            ev = _parse_event(message_text)
+            if not ev:
+                continue
+            name = str(ev.get("event") or "")
+            service = str(ev.get("service") or "unknown")
+            uid = int(user_id)
+
+            step: Optional[str] = None
+            if name == "entry_service":
+                step = "entry_service"
+            elif name in engagement_start_events:
+                step = "engagement_start"
+            elif name in engagement_complete_events:
+                step = "engagement_complete"
+            elif name == "cta_lead_start":
+                step = "cta_lead_start"
+            elif name == "contact_submitted":
+                step = "contact_submitted"
+            elif name in meeting_window_events:
+                step = "meeting_window"
+            elif name == "lead_created":
+                step = "lead_created"
+
+            if not step:
+                continue
+
+            svc_map = by_service.setdefault(service, {s: set() for s in steps})
+            svc_map[step].add(uid)
+            overall[step].add(uid)
+
+        def pack(step_sets: Dict[str, set[int]]) -> Dict[str, Any]:
+            counts = {s: len(step_sets[s]) for s in steps}
+            # Sequential conversion (unique users)
+            conv = {
+                "entry_to_start": _pct(counts["engagement_start"], counts["entry_service"]),
+                "start_to_complete": _pct(counts["engagement_complete"], counts["engagement_start"]),
+                "complete_to_cta": _pct(counts["cta_lead_start"], counts["engagement_complete"]),
+                "cta_to_contact": _pct(counts["contact_submitted"], counts["cta_lead_start"]),
+                "contact_to_meeting": _pct(counts["meeting_window"], counts["contact_submitted"]),
+                "meeting_to_lead": _pct(counts["lead_created"], counts["meeting_window"]),
+                "entry_to_lead": _pct(counts["lead_created"], counts["entry_service"]),
+            }
+            drops = {
+                "drop_entry": max(0, counts["entry_service"] - counts["engagement_start"]),
+                "drop_start": max(0, counts["engagement_start"] - counts["engagement_complete"]),
+                "drop_complete": max(0, counts["engagement_complete"] - counts["cta_lead_start"]),
+                "drop_cta": max(0, counts["cta_lead_start"] - counts["contact_submitted"]),
+                "drop_contact": max(0, counts["contact_submitted"] - counts["meeting_window"]),
+                "drop_meeting": max(0, counts["meeting_window"] - counts["lead_created"]),
+            }
+            return {"counts": counts, "conversion": conv, "drops": drops}
+
+        return {
+            "steps": steps,
+            "overall": pack(overall),
+            "by_service": {svc: pack(step_sets) for svc, step_sets in by_service.items()},
         }
 
     @app.get("/api/export.csv")

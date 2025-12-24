@@ -1,0 +1,174 @@
+from __future__ import annotations
+
+from typing import Dict, List, Optional, Tuple
+
+from aiogram import F, Router
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import CallbackQuery, Message
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.models.dialog_message import DialogMessage
+from src.models.user_memory import UserMemory
+from src.services.finance_calc import estimate_refinance, parse_percent, parse_term_months
+from src.services.subsidy_calc import parse_money_rub
+from src.utils.funnel import log_event
+from src.utils.keyboards import lead_actions_keyboard
+from src.utils.messages import msg
+
+
+router = Router()
+
+
+class FinanceCalc(StatesGroup):
+    waiting_for_answer = State()
+
+
+_FIN_QUESTIONS: List[Tuple[str, str]] = [
+    ("goal", "1) Что нужно: новый кредит или рефинанс? (напишите: новый / рефинанс)"),
+    ("amount", "2) Сумма (если рефинанс — остаток долга). Пример: «25 млн ₽»"),
+    ("rate", "3) Текущая ставка (% годовых). Если не знаете — напишите «не знаю»"),
+    ("term", "4) Срок (если рефинанс — остаток; если новый — желаемый). Пример: «36 мес» или «3 года»"),
+    ("banks", "5) Сколько кредитных линий и в каких банках? (кратко, можно «не знаю»)"),
+    ("company", "6) Форма (ООО/ИП) + отрасль (1 фраза)"),
+    ("urgency", "7) Когда нужно решение? (сейчас/в течение месяца/позже)"),
+]
+
+
+def _goal_is_refi(raw: str) -> bool:
+    t = (raw or "").strip().lower()
+    return "рефин" in t or "реф" in t
+
+
+def _first_money(text: str) -> Optional[int]:
+    values = parse_money_rub(text)
+    return max(values) if values else None
+
+
+@router.callback_query(F.data.startswith("finance:calc:start:"))
+async def start_finance_calc(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    service_key = (callback.data or "").split("finance:calc:start:", 1)[-1].strip()
+    if not service_key:
+        service_key = "subsidies_financing"
+
+    await state.set_state(FinanceCalc.waiting_for_answer)
+    await state.update_data(service_key=service_key, fin_step=0, fin_answers={})
+
+    await log_event(
+        session,
+        user_id=callback.from_user.id,
+        chat_id=callback.message.chat.id,
+        username=callback.from_user.username,
+        event="finance_calc_start",
+        service_key=service_key,
+    )
+
+    await callback.message.answer(
+        "Ок, сделаю предварительный расчёт. Это займёт ~2 минуты. Отвечайте коротко."
+    )
+    await callback.message.answer(_FIN_QUESTIONS[0][1])
+    await callback.answer()
+
+
+@router.message(FinanceCalc.waiting_for_answer)
+async def handle_finance_calc_answer(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    user_id = message.from_user.id
+    text = (message.text or "").strip()
+    if not text:
+        return
+
+    data = await state.get_data()
+    step = int(data.get("fin_step", 0))
+    answers: Dict[str, str] = dict(data.get("fin_answers") or {})
+
+    if step < 0 or step >= len(_FIN_QUESTIONS):
+        await state.clear()
+        return
+
+    key, q_text = _FIN_QUESTIONS[step]
+
+    # validation
+    if key == "amount":
+        if _first_money(text) is None:
+            await message.answer("Не вижу сумму. Пример: «25 млн ₽» или «12 500 000»")
+            return
+    if key == "rate" and text.lower() not in {"не знаю", "незнаю", "не знаю.", "нет"}:
+        if parse_percent(text) is None:
+            await message.answer("Не вижу % ставку. Пример: «18%» или «16.5» (проценты годовых)")
+            return
+    if key == "term":
+        if parse_term_months(text) is None:
+            await message.answer("Не вижу срок. Пример: «36 мес» или «3 года»")
+            return
+
+    answers[key] = text[:500]
+
+    # Persist user answer for traceability
+    await UserMemory.add_message(session, user_id, "user", f"{q_text}\nОтвет: {text}")
+    await DialogMessage.create(
+        session,
+        user_id=user_id,
+        username=message.from_user.username,
+        full_name=None,
+        phone=None,
+        message_text=text,
+        role="user",
+        chat_id=message.chat.id,
+        message_id=message.message_id,
+    )
+
+    step += 1
+    await state.update_data(fin_step=step, fin_answers=answers)
+
+    if step < len(_FIN_QUESTIONS):
+        await message.answer(_FIN_QUESTIONS[step][1])
+        return
+
+    # Compute estimate (refi-focused, but still useful for new credit as "next steps")
+    goal = answers.get("goal", "")
+    principal = _first_money(answers.get("amount", "")) or 0
+    rate = parse_percent(answers.get("rate", "")) if answers.get("rate") else None
+    term = parse_term_months(answers.get("term", "")) if answers.get("term") else None
+
+    is_refi = _goal_is_refi(goal)
+    estimate_text = ""
+
+    if is_refi:
+        est = estimate_refinance(principal_rub=principal, current_rate=rate, term_months=term)
+        if est.savings_range_rub_per_year:
+            lo, hi = est.savings_range_rub_per_year
+            estimate_text = (
+                "📌 Предварительная оценка экономии при снижении ставки на 2–5 п.п.:\n"
+                f"≈ {lo:,} – {hi:,} ₽/год\n\n{est.note}"
+            ).replace(",", " ")
+        else:
+            estimate_text = f"📌 Предварительная оценка: {est.note}"
+    else:
+        estimate_text = (
+            "📌 Предварительная оценка: по вашему запросу можно подобрать льготные программы и банки‑партнёры SRVT.\n"
+            "Чтобы дать расчёт по сумме/ставке точнее — нужно уточнить 2–3 параметра на созвоне."
+        )
+
+    # Build summary for Bitrix/comments and reuse lead flow
+    summary_lines = ["SRVT • Рассчитать финансирование/рефинанс"]
+    for k, q in _FIN_QUESTIONS:
+        summary_lines.append(f"{q}\nОтвет: {answers.get(k, '')}")
+    summary_lines.append(estimate_text)
+    summary_lines.append("SRVT обещание: предварительное решение по заявке в течение дня (в рабочее время).")
+    summary_text = "\n\n".join(summary_lines)
+
+    await log_event(
+        session,
+        user_id=user_id,
+        chat_id=message.chat.id,
+        username=message.from_user.username,
+        event="finance_calc_complete",
+        service_key="subsidies_financing",
+    )
+
+    await UserMemory.add_message(session, user_id, "system", summary_text)
+    await state.update_data(questionnaire_summary=summary_text)
+
+    await message.answer(estimate_text, reply_markup=lead_actions_keyboard("subsidies_financing"))
+
+
