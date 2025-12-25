@@ -37,11 +37,19 @@ async def init_db() -> None:
     """Initialize engine and create tables."""
     global _engine, _session_factory
 
+    connect_args = {}
+    # Supabase managed Postgres typically requires SSL. asyncpg supports ssl as a string:
+    # 'disable'|'prefer'|'allow'|'require'|'verify-ca'|'verify-full' (default: 'prefer').
+    sslmode = (settings.postgres_sslmode or "").strip().lower()
+    if sslmode:
+        connect_args["ssl"] = sslmode
+
     _engine = create_async_engine(
         settings.database_url,
         echo=settings.debug_mode,
         poolclass=NullPool,
         pool_pre_ping=True,
+        connect_args=connect_args,
     )
     _session_factory = async_sessionmaker(
         _engine,

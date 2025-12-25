@@ -72,6 +72,8 @@ docker compose exec bot python scripts/ingest_pdf_subsidies.py --pdf data/subsid
 - `TELEGRAM_BOT_TOKEN`
 - `MANAGER_CHAT_IDS` (необязательно)
 - `POSTGRES_*`
+- `DATABASE_URL` (опционально, удобно для Supabase)
+- `POSTGRES_SSLMODE` (опционально; для Supabase обычно `require`)
 - `OPENAI_API_KEY` (нужен для RAG и AI‑ответов)
 - `BITRIX24_WEBHOOK_URL` (опционально, можно пустым на этапе разработки)
 - `ADMIN_PASSWORD` (для админки)

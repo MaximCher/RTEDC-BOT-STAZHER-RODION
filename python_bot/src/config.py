@@ -19,11 +19,13 @@ class Settings(BaseSettings):
     manager_chat_ids: str = Field("", alias="MANAGER_CHAT_IDS")
 
     # Database
+    database_url_override: str = Field("", alias="DATABASE_URL")
     postgres_host: str = Field("db", alias="POSTGRES_HOST")
     postgres_port: int = Field(5432, alias="POSTGRES_PORT")
     postgres_db: str = Field("srvt_bot", alias="POSTGRES_DB")
     postgres_user: str = Field("srvt", alias="POSTGRES_USER")
     postgres_password: str = Field(..., alias="POSTGRES_PASSWORD")
+    postgres_sslmode: str = Field("prefer", alias="POSTGRES_SSLMODE")
 
     # OpenAI
     openai_api_key: str = Field("", alias="OPENAI_API_KEY")
@@ -99,6 +101,15 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
+        raw = (self.database_url_override or "").strip()
+        if raw:
+            # Accept common sync DSN formats and convert to async SQLAlchemy dialect.
+            if raw.startswith("postgresql://"):
+                return "postgresql+asyncpg://" + raw[len("postgresql://") :]
+            if raw.startswith("postgres://"):
+                return "postgresql+asyncpg://" + raw[len("postgres://") :]
+            return raw
+
         return (
             f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
