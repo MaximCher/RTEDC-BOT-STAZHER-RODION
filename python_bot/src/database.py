@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from typing import AsyncGenerator, Optional
+from urllib.parse import urlparse
+from uuid import uuid4
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
@@ -13,7 +15,6 @@ from sqlalchemy.orm import declarative_base
 from sqlalchemy.pool import NullPool
 from src.config import settings
 from src.logger import logger
-from urllib.parse import urlparse
 
 Base = declarative_base()
 
@@ -58,6 +59,10 @@ async def init_db() -> None:
         port = parsed.port
         if port == 6543 or host.endswith("pooler.supabase.com"):
             connect_args["statement_cache_size"] = 0
+            # Prevent name conflicts on pooled server connections.
+            connect_args["prepared_statement_name_func"] = (
+                lambda: f"__asyncpg_{uuid4()}__"
+            )
     except Exception:
         pass
 
