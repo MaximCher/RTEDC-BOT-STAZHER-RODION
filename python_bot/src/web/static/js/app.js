@@ -38,7 +38,7 @@ const FUNNEL_STEP_LABELS = {
   engagement_complete: "3) Дошли до результата",
   cta_lead_start: "4) Нажали «Оставить заявку»",
   contact_submitted: "5) Оставили контакт",
-  meeting_window: "6) Выбрали/ввели окно созвона",
+  meeting_window: "6) Выбрали/ввели время для созвона",
   lead_created: "7) Лид создан",
 };
 
@@ -47,8 +47,8 @@ const CONV_LABELS = {
   start_to_complete: "Старт → результат",
   complete_to_cta: "Результат → «заявка»",
   cta_to_contact: "«Заявка» → контакт",
-  contact_to_meeting: "Контакт → окно",
-  meeting_to_lead: "Окно → лид",
+  contact_to_meeting: "Контакт → время",
+  meeting_to_lead: "Время → лид",
   entry_to_lead: "Вход → лид",
 };
 
@@ -58,8 +58,8 @@ const EVENT_LABELS = {
   engagement_complete: "Получили результат",
   cta_lead_start: "Нажали «Оставить заявку»",
   contact_submitted: "Оставили контакт",
-  meeting_window_selected: "Выбрали окно созвона",
-  meeting_window_submitted: "Ввели окно созвона",
+  meeting_window_selected: "Выбрали время для созвона",
+  meeting_window_submitted: "Ввели время для созвона",
   lead_created: "Лид создан (Bitrix)",
   subsidy_calc_complete: "Калькулятор субсидий завершён",
   finance_calc_complete: "Калькулятор финансирования завершён",
@@ -323,7 +323,7 @@ async function loadFunnel() {
                 <tr><td class="text-secondary">3) Дошли до результата</td><td class="text-end fw-bold">${counts.engagement_complete || 0}</td></tr>
                 <tr><td class="text-secondary">4) Нажали «Оставить заявку»</td><td class="text-end fw-bold">${counts.cta_lead_start || 0}</td></tr>
                 <tr><td class="text-secondary">5) Оставили контакт</td><td class="text-end fw-bold">${counts.contact_submitted || 0}</td></tr>
-                <tr><td class="text-secondary">6) Выбрали/ввели окно созвона</td><td class="text-end fw-bold">${counts.meeting_window || 0}</td></tr>
+                <tr><td class="text-secondary">6) Выбрали/ввели время для созвона</td><td class="text-end fw-bold">${counts.meeting_window || 0}</td></tr>
                 <tr><td class="text-secondary">7) Лид создан</td><td class="text-end fw-bold">${counts.lead_created || 0}</td></tr>
               </tbody>
             </table>
@@ -348,8 +348,8 @@ async function loadFunnel() {
                 <tr><td class="text-secondary">Старт → результат</td><td class="text-end fw-bold">${pct(conv.start_to_complete)}</td></tr>
                 <tr><td class="text-secondary">Результат → «заявка»</td><td class="text-end fw-bold">${pct(conv.complete_to_cta)}</td></tr>
                 <tr><td class="text-secondary">«Заявка» → контакт</td><td class="text-end fw-bold">${pct(conv.cta_to_contact)}</td></tr>
-                <tr><td class="text-secondary">Контакт → окно</td><td class="text-end fw-bold">${pct(conv.contact_to_meeting)}</td></tr>
-                <tr><td class="text-secondary">Окно → лид</td><td class="text-end fw-bold">${pct(conv.meeting_to_lead)}</td></tr>
+                <tr><td class="text-secondary">Контакт → время</td><td class="text-end fw-bold">${pct(conv.contact_to_meeting)}</td></tr>
+                <tr><td class="text-secondary">Время → лид</td><td class="text-end fw-bold">${pct(conv.meeting_to_lead)}</td></tr>
                 <tr><td class="text-secondary">Вход → лид</td><td class="text-end fw-bold">${pct(conv.entry_to_lead)}</td></tr>
               </tbody>
             </table>
@@ -387,8 +387,8 @@ async function loadFunnel() {
                 <tr><td class="text-secondary">После старта (не доходят до результата)</td><td class="text-end fw-bold">${drops.drop_start || 0}</td></tr>
                 <tr><td class="text-secondary">После результата (не жмут «заявка»)</td><td class="text-end fw-bold">${drops.drop_complete || 0}</td></tr>
                 <tr><td class="text-secondary">После «заявка» (не оставляют контакт)</td><td class="text-end fw-bold">${drops.drop_cta || 0}</td></tr>
-                <tr><td class="text-secondary">После контакта (не выбирают окно)</td><td class="text-end fw-bold">${drops.drop_contact || 0}</td></tr>
-                <tr><td class="text-secondary">После окна (лид не создан)</td><td class="text-end fw-bold">${drops.drop_meeting || 0}</td></tr>
+                <tr><td class="text-secondary">После контакта (не выбирают время)</td><td class="text-end fw-bold">${drops.drop_contact || 0}</td></tr>
+                <tr><td class="text-secondary">После выбора времени (лид не создан)</td><td class="text-end fw-bold">${drops.drop_meeting || 0}</td></tr>
               </tbody>
             </table>
           </div>
