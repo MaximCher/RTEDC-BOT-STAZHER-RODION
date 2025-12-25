@@ -104,7 +104,27 @@ async function logout() {
 }
 
 async function reloadAll() {
-  await Promise.all([loadStats(), loadFunnel(), loadUsers(), loadStaff()]);
+  await Promise.all([
+    loadWebappUrl(),
+    loadStats(),
+    loadFunnel(),
+    loadUsers(),
+    loadStaff(),
+  ]);
+}
+
+async function loadWebappUrl() {
+  const a = qs("current-webapp-url");
+  if (!a) return;
+  try {
+    const data = await api("/api/webapp-url");
+    const url = String(data?.url || "").trim();
+    if (!url) return;
+    a.textContent = url;
+    a.href = url;
+  } catch {
+    // ignore
+  }
 }
 
 async function loadStats() {

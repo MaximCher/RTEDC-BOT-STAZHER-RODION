@@ -12,11 +12,13 @@ from pydantic import BaseModel
 from sqlalchemy import func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.config import settings
 from src.database import get_session_factory
 from src.models.bitrix_lead import BitrixLead
 from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
 from src.models.staff import StaffMember
+from src.utils.webapp_url import get_webapp_public_url
 from src.web.auth import (
     SESSION_KEY,
     require_auth,
@@ -221,6 +223,13 @@ def register_api(app: FastAPI) -> None:
             "leads_by_service": leads_by_service,
             "users_by_service": users_by_service,
         }
+
+    @app.get("/api/webapp-url")
+    async def get_webapp_url(
+        request: Request,
+        _: None = Depends(require_auth),
+    ) -> Dict[str, Any]:
+        return {"url": get_webapp_public_url(settings.webapp_public_url)}
 
     def _parse_event(message_text: str) -> Optional[Dict[str, Any]]:
         if not message_text or not message_text.startswith("event:"):
