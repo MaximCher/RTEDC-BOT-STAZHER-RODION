@@ -44,6 +44,8 @@ jobs:
       WEB_SESSION_SECRET: ${{ secrets.WEB_SESSION_SECRET }}
       WEBAPP_PUBLIC_URL: ${{ secrets.WEBAPP_PUBLIC_URL }}
       ADMIN_USER_IDS: ${{ secrets.ADMIN_USER_IDS }}
+      TUNA_TOKEN: ${{ secrets.TUNA_TOKEN }}
+      TUNA_HTTP_PORT: ${{ secrets.TUNA_HTTP_PORT }}
       LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
       DEBUG_MODE: ${{ secrets.DEBUG_MODE }}
     steps:
@@ -98,6 +100,7 @@ jobs:
           EMBEDDING_MODEL="${EMBEDDING_MODEL:-text-embedding-3-small}"
           LOG_LEVEL="${LOG_LEVEL:-INFO}"
           DEBUG_MODE="${DEBUG_MODE:-false}"
+          TUNA_HTTP_PORT="${TUNA_HTTP_PORT:-80}"
 
           ssh -p "${DEPLOY_PORT}" "${DEPLOY_USER}@${DEPLOY_HOST}" "bash -lc 'set -euo pipefail
             cd \"${DEPLOY_PATH}/python_bot\"
@@ -135,6 +138,9 @@ WEB_PORT=8000
 
 WEBAPP_PUBLIC_URL=${WEBAPP_PUBLIC_URL}
 ADMIN_USER_IDS=${ADMIN_USER_IDS}
+
+TUNA_TOKEN=${TUNA_TOKEN}
+TUNA_HTTP_PORT=${TUNA_HTTP_PORT}
 EOF
             chmod 600 .env
           '"
