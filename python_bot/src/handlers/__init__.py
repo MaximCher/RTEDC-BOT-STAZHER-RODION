@@ -9,12 +9,14 @@ from src.handlers.payments import router as payments_router
 from src.handlers.quick_audit import router as quick_audit_router
 from src.handlers.services import router as services_router
 from src.handlers.start import router as start_router
+from src.handlers.staff_chat import router as staff_chat_router
 from src.handlers.subsidies import router as subsidies_router
 
 
 def get_routers() -> list[Router]:
     return [
         start_router,
+        staff_chat_router,
         services_router,
         lead_router,
         subsidies_router,

@@ -16,6 +16,7 @@ class Settings(BaseSettings):
 
     # Telegram
     telegram_bot_token: str = Field(..., alias="TELEGRAM_BOT_TOKEN")
+    telegram_bot_username: str = Field("", alias="TELEGRAM_BOT_USERNAME")
     manager_chat_ids: str = Field("", alias="MANAGER_CHAT_IDS")
 
     # Database

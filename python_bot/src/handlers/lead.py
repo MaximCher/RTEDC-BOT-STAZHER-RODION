@@ -7,13 +7,22 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.bitrix import BitrixClient
 from src.models.bitrix_lead import BitrixLead
 from src.models.dialog_message import DialogMessage
+from src.models.lead_ticket import LeadTicket
+from src.models.staff import StaffMember
 from src.models.user_memory import UserMemory
-from src.utils.keyboards import flow_nav_keyboard, meeting_window_keyboard, services_keyboard
+from src.config import SERVICES
+from src.utils.keyboards import (
+    flow_nav_keyboard,
+    meeting_window_keyboard,
+    services_keyboard,
+    staff_ticket_keyboard,
+)
 from src.utils.messages import msg
 from src.utils.rate_limit import FixedWindowRateLimiter
 from src.utils.funnel import log_event
@@ -220,6 +229,7 @@ def _meeting_window_from_code(code: str) -> str:
 async def _submit_lead(
     *,
     session: AsyncSession,
+    bot,
     user_id: int,
     chat_id: int,
     service_key: str,
@@ -265,6 +275,57 @@ async def _submit_lead(
             meta={"lead_id": lead_id},
         )
 
+        # Create ticket for staff work
+        ticket = LeadTicket(
+            lead_user_id=user_id,
+            lead_chat_id=chat_id,
+            bitrix_lead_id=lead_id,
+            service_key=service_key,
+            lead_full_name=full_name,
+            lead_phone=phone,
+            lead_username=username,
+            meeting_window=meeting_window,
+            summary_text=summary_text,
+            status="new",
+            assigned_to_tg_user_id=None,
+            chat_enabled=0,
+        )
+        session.add(ticket)
+        await session.commit()
+        await session.refresh(ticket)
+
+        # Notify staff (admins + managers)
+        try:
+            res = await session.execute(
+                select(StaffMember).where(StaffMember.role.in_(["admin", "manager"]))
+            )
+            staff = list(res.scalars().all())
+        except Exception:
+            staff = []
+        if staff:
+            service_label = SERVICES.get(service_key, service_key)
+            lead_label = full_name or f"Telegram {user_id}"
+            phone_line = f"Телефон: {phone}" if phone else "Телефон: —"
+            mw_line = f"Окно (МСК): {meeting_window}" if meeting_window else "Окно (МСК): —"
+            staff_text = (
+                "Новый лид SRVT\n"
+                f"Услуга: {service_label}\n"
+                f"Лид: {lead_label}\n"
+                f"{phone_line}\n"
+                f"{mw_line}\n"
+                f"Bitrix lead_id: {lead_id}\n"
+                f"Тикет: #{ticket.id}"
+            )
+            for m in staff:
+                try:
+                    await bot.send_message(
+                        chat_id=int(m.tg_user_id),
+                        text=staff_text,
+                        reply_markup=staff_ticket_keyboard(ticket.id),
+                    )
+                except Exception:
+                    continue
+
 
 @router.message(LeadForm.waiting_for_meeting_window)
 async def lead_process_meeting_window(
@@ -301,6 +362,7 @@ async def lead_process_meeting_window(
     )
     await _submit_lead(
         session=session,
+        bot=message.bot,
         user_id=user_id,
         chat_id=message.chat.id,
         service_key=service_key,
@@ -361,6 +423,7 @@ async def lead_meeting_window_pick(
 
     await _submit_lead(
         session=session,
+        bot=callback.message.bot,
         user_id=user_id,
         chat_id=callback.message.chat.id,
         service_key=service_key,

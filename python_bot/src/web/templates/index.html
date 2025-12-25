@@ -105,7 +105,7 @@
                 <div>
                   <div class="card-title">Админы / менеджеры</div>
                   <div class="text-secondary">
-                    Управление доступом к админке и ролями.
+                    Staff получают уведомления о лидах. Админка (Mini App) — только для admin.
                   </div>
                 </div>
               </div>
@@ -129,6 +129,50 @@
                     <button class="btn btn-primary w-100" onclick="addStaff()">
                       Добавить
                     </button>
+                  </div>
+                </div>
+                <div class="mt-3">
+                  <div class="row g-2 align-items-end">
+                    <div class="col-12 col-md-3">
+                      <label class="form-label">Приглашение</label>
+                      <select id="invite-role" class="form-select">
+                        <option value="manager">manager</option>
+                        <option value="admin">admin</option>
+                      </select>
+                    </div>
+                    <div class="col-12 col-md-3">
+                      <label class="form-label">TTL (часов)</label>
+                      <input
+                        id="invite-ttl"
+                        type="number"
+                        class="form-control"
+                        value="168"
+                        min="1"
+                        max="720"
+                      />
+                    </div>
+                    <div class="col-12 col-md-3">
+                      <button class="btn btn-outline-primary w-100" onclick="createInvite()">
+                        Сгенерировать ссылку
+                      </button>
+                    </div>
+                    <div class="col-12 col-md-3">
+                      <button class="btn btn-outline-secondary w-100" onclick="copyInvite()">
+                        Копировать
+                      </button>
+                    </div>
+                    <div class="col-12">
+                      <input
+                        id="invite-link"
+                        type="text"
+                        class="form-control"
+                        readonly
+                        placeholder="Ссылка появится здесь…"
+                      />
+                      <div class="text-secondary small mt-1">
+                        Если ссылка вида <code>invite_...</code> — укажите <code>TELEGRAM_BOT_USERNAME</code> в .env, чтобы формировать полноценный <code>t.me</code> URL.
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div class="mt-3">

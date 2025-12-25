@@ -515,11 +515,17 @@ async function loadStaff() {
     <div class="list-group">
       ${data.items
         .map((m) => {
+          const name = m.tg_full_name || "";
+          const username = m.tg_username ? `@${m.tg_username}` : "";
+          const who = [name, username].filter(Boolean).join(" · ") || String(m.tg_user_id);
+          const seen = m.last_seen_at ? `Активен: ${fmtDate(m.last_seen_at)}` : "Активность: —";
           return `
             <div class="list-group-item">
               <div class="d-flex justify-content-between align-items-start gap-2">
                 <div>
-                  <div class="fw-bold">${escapeHtml(String(m.tg_user_id))}</div>
+                  <div class="fw-bold">${escapeHtml(who)}</div>
+                  <div class="text-secondary small">${escapeHtml(String(m.tg_user_id))}</div>
+                  <div class="text-secondary small">${escapeHtml(seen)}</div>
                   <div class="text-secondary small">Добавлен: ${fmtDate(m.created_at)}</div>
                 </div>
                 <div class="text-end">
@@ -537,6 +543,33 @@ async function loadStaff() {
         .join("")}
     </div>
   `;
+}
+
+async function createInvite() {
+  const role = (qs("invite-role").value || "manager").trim();
+  const ttlHours = Number((qs("invite-ttl").value || "168").trim());
+  if (!Number.isFinite(ttlHours) || ttlHours <= 0) {
+    alert("Введите корректный TTL (часов).");
+    return;
+  }
+  const data = await api(`/api/staff/invites`, {
+    method: "POST",
+    body: JSON.stringify({ role, ttl_hours: ttlHours }),
+  });
+  qs("invite-link").value = data.url || "";
+}
+
+function copyInvite() {
+  const el = qs("invite-link");
+  const value = el.value || "";
+  if (!value) return;
+  el.select();
+  el.setSelectionRange(0, value.length);
+  try {
+    document.execCommand("copy");
+  } catch (e) {
+    // ignore
+  }
 }
 
 async function addStaff() {
@@ -575,7 +608,16 @@ async function openConversation(userId) {
   container.innerHTML = messages
     .map((m) => {
       const role = m.role || "user";
-      const who = role === "assistant" ? "Бот" : role === "system" ? "Система" : "Пользователь";
+      const who =
+        role === "assistant"
+          ? "Бот"
+          : role === "system"
+            ? "Система"
+            : role === "staff"
+              ? "Менеджер"
+              : role === "event"
+                ? "Событие"
+                : "Пользователь";
       return `
         <div class="msg ${role}">
           <div class="head">

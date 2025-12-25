@@ -229,3 +229,79 @@ def meeting_window_keyboard(include_back: bool = False) -> InlineKeyboardMarkup:
     )
 
 
+def staff_ticket_keyboard(ticket_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Взять в работу",
+                    callback_data=f"staff:ticket:claim:{ticket_id}",
+                ),
+                InlineKeyboardButton(
+                    text="💬 Запросить чат",
+                    callback_data=f"staff:ticket:request_chat:{ticket_id}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🗂 Открыть чат",
+                    callback_data=f"staff:ticket:open:{ticket_id}",
+                ),
+                InlineKeyboardButton(
+                    text="🔁 Передать",
+                    callback_data=f"staff:ticket:transfer:{ticket_id}",
+                ),
+                InlineKeyboardButton(
+                    text="✅ Закрыть",
+                    callback_data=f"staff:ticket:close:{ticket_id}",
+                ),
+            ],
+        ]
+    )
+
+
+def lead_chat_request_keyboard(ticket_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Да, хочу консультацию",
+                    callback_data=f"lead:chat:accept:{ticket_id}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="❌ Не сейчас",
+                    callback_data=f"lead:chat:decline:{ticket_id}",
+                )
+            ],
+        ]
+    )
+
+
+def lead_chat_active_keyboard(ticket_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🚪 Выйти из чата",
+                    callback_data=f"lead:chat:exit:{ticket_id}",
+                )
+            ]
+        ]
+    )
+
+
+def staff_chat_active_keyboard(ticket_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🚪 Выйти",
+                    callback_data=f"staff:chat:exit:{ticket_id}",
+                )
+            ]
+        ]
+    )
+
+

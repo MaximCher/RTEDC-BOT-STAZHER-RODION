@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import List, Optional
 
 from sqlalchemy import delete, select
@@ -33,6 +34,29 @@ async def is_admin(session: AsyncSession, tg_user_id: int) -> bool:
     )
     res = await session.execute(q)
     return res.scalar_one_or_none() is not None
+
+
+async def is_staff(session: AsyncSession, tg_user_id: int) -> bool:
+    q = select(StaffMember.id).where(StaffMember.tg_user_id == tg_user_id)
+    res = await session.execute(q)
+    return res.scalar_one_or_none() is not None
+
+
+async def touch_staff_profile(
+    session: AsyncSession,
+    *,
+    tg_user_id: int,
+    tg_username: Optional[str],
+    tg_full_name: Optional[str],
+) -> None:
+    """Update staff profile fields if user is staff. No-op for non-staff."""
+    res = await session.execute(select(StaffMember).where(StaffMember.tg_user_id == tg_user_id))
+    m = res.scalar_one_or_none()
+    if not m:
+        return
+    m.tg_username = tg_username or m.tg_username
+    m.tg_full_name = tg_full_name or m.tg_full_name
+    m.last_seen_at = datetime.utcnow()
 
 
 async def list_staff(session: AsyncSession) -> List[StaffMember]:

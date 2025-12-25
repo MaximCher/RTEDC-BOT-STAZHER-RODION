@@ -18,6 +18,7 @@ from src.models.bitrix_lead import BitrixLead
 from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
 from src.models.staff import StaffMember
+from src.models.staff_invite import StaffInvite
 from src.utils.webapp_url import get_webapp_public_url
 from src.web.auth import (
     SESSION_KEY,
@@ -33,6 +34,11 @@ class LoginRequest(BaseModel):
 class StaffUpsertRequest(BaseModel):
     tg_user_id: int
     role: str  # admin | manager
+
+
+class StaffInviteCreateRequest(BaseModel):
+    role: str  # admin | manager
+    ttl_hours: int = 168  # 7 days
 
 
 def _parse_date(raw: Optional[str]) -> Optional[date]:
@@ -462,11 +468,54 @@ def register_api(app: FastAPI) -> None:
             {
                 "tg_user_id": int(m.tg_user_id),
                 "role": m.role,
+                "tg_username": m.tg_username,
+                "tg_full_name": m.tg_full_name,
+                "last_seen_at": m.last_seen_at.isoformat() if m.last_seen_at else None,
                 "created_at": m.created_at.isoformat(),
             }
             for m in rows
         ]
         return {"items": items, "total": len(items)}
+
+    @app.post("/api/staff/invites")
+    async def create_staff_invite(
+        payload: StaffInviteCreateRequest,
+        request: Request,
+        session: AsyncSession = Depends(_get_session),
+        _: None = Depends(require_auth),
+    ) -> Dict[str, Any]:
+        role = (payload.role or "").strip().lower()
+        if role not in {"admin", "manager"}:
+            raise HTTPException(status_code=400, detail="Invalid role")
+        ttl_hours = int(payload.ttl_hours or 0)
+        if ttl_hours <= 0 or ttl_hours > 24 * 30:
+            raise HTTPException(status_code=400, detail="Invalid ttl_hours")
+
+        import secrets
+
+        token = secrets.token_urlsafe(18)[:48]
+        inv = StaffInvite(
+            token=token,
+            role=role,
+            created_by_tg_user_id=0,
+            expires_at=datetime.utcnow() + timedelta(hours=ttl_hours),
+        )
+        session.add(inv)
+        await session.commit()
+        await session.refresh(inv)
+
+        # Full link requires bot username; otherwise return payload to paste manually.
+        if settings.telegram_bot_username:
+            url = f"https://t.me/{settings.telegram_bot_username}?start=invite_{token}"
+        else:
+            url = f"invite_{token}"
+        return {
+            "success": True,
+            "token": token,
+            "role": role,
+            "expires_at": inv.expires_at.isoformat() if inv.expires_at else None,
+            "url": url,
+        }
 
     @app.post("/api/staff")
     async def add_staff_member(

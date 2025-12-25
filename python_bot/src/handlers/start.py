@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from aiogram import F, Router
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandObject, CommandStart
+from aiogram.utils.deep_linking import decode_payload
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, MenuButtonWebApp, WebAppInfo
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
-from src.services.staff_service import is_admin
+from src.models.staff import StaffMember
+from src.models.staff_invite import StaffInvite
+from src.services.staff_service import is_admin, touch_staff_profile
 from src.utils.service_entry import entry_screen_for_service
 from src.utils.keyboards import services_keyboard
 from src.utils.messages import msg
@@ -17,9 +23,20 @@ from src.utils.webapp_url import get_webapp_public_url
 router = Router()
 
 
-@router.message(CommandStart())
-async def cmd_start(message: Message, state: FSMContext, session: AsyncSession) -> None:
+async def _render_menu(message: Message, state: FSMContext, session: AsyncSession) -> None:
     await state.clear()
+
+    # Update staff profile (if user is staff)
+    try:
+        await touch_staff_profile(
+            session,
+            tg_user_id=message.from_user.id,
+            tg_username=message.from_user.username,
+            tg_full_name=message.from_user.full_name,
+        )
+    except Exception:
+        pass
+
     # If user is admin, enable "Admin panel" button near input (Telegram menu button)
     try:
         if await is_admin(session, message.from_user.id):
@@ -27,15 +44,64 @@ async def cmd_start(message: Message, state: FSMContext, session: AsyncSession) 
                 chat_id=message.chat.id,
                 menu_button=MenuButtonWebApp(
                     text="Админка SRVT",
-                    web_app=WebAppInfo(
-                        url=get_webapp_public_url(settings.webapp_public_url)
-                    ),
+                    web_app=WebAppInfo(url=get_webapp_public_url(settings.webapp_public_url)),
                 ),
             )
     except Exception:
         # do not block /start on menu button errors
         pass
     await message.answer(msg("welcome"), reply_markup=services_keyboard())
+
+
+@router.message(CommandStart())
+async def cmd_start(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    await _render_menu(message, state, session)
+
+
+@router.message(CommandStart(deep_link=True))
+async def cmd_start_deeplink(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    command: CommandObject,
+) -> None:
+    # Deep-link invite: /start invite_<token>
+    raw_args = (command.args or "").strip()
+    payload = raw_args
+    if raw_args:
+        try:
+            payload = decode_payload(raw_args)
+        except Exception:
+            payload = raw_args
+    if payload.startswith("invite_"):
+        token = payload.split("invite_", 1)[-1].strip()
+        inv = await StaffInvite.get_by_token(session, token)
+        if inv and inv.used_by_tg_user_id is None and (not inv.expires_at or inv.expires_at >= datetime.utcnow()):
+            existing = (
+                await session.execute(select(StaffMember).where(StaffMember.tg_user_id == message.from_user.id))
+            ).scalar_one_or_none()
+            if existing:
+                existing.role = inv.role
+                existing.tg_username = message.from_user.username
+                existing.tg_full_name = message.from_user.full_name
+                existing.last_seen_at = datetime.utcnow()
+            else:
+                session.add(
+                    StaffMember(
+                        tg_user_id=message.from_user.id,
+                        role=inv.role,
+                        tg_username=message.from_user.username,
+                        tg_full_name=message.from_user.full_name,
+                        last_seen_at=datetime.utcnow(),
+                    )
+                )
+            inv.used_by_tg_user_id = message.from_user.id
+            inv.used_at = datetime.utcnow()
+            await session.commit()
+            await message.answer(f"Готово! Вы добавлены как **{inv.role}**.", parse_mode="Markdown")
+        else:
+            await message.answer("Приглашение недействительно или истекло.")
+    await _render_menu(message, state, session)
 
 
 @router.callback_query(F.data == "menu:root")

@@ -91,6 +91,20 @@ async def init_db() -> None:
             pass
         # tables
         await conn.run_sync(Base.metadata.create_all)
+        # Soft-migrations (keep production stable without Alembic for now)
+        # Staff profile fields (show names instead of IDs in admin panel)
+        try:
+            await conn.execute(text("ALTER TABLE staff ADD COLUMN IF NOT EXISTS tg_username VARCHAR(255)"))
+        except Exception:
+            pass
+        try:
+            await conn.execute(text("ALTER TABLE staff ADD COLUMN IF NOT EXISTS tg_full_name TEXT"))
+        except Exception:
+            pass
+        try:
+            await conn.execute(text("ALTER TABLE staff ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMP"))
+        except Exception:
+            pass
         # Hotfix: bot_id for bot_heartbeat must be bigint
         # (Telegram IDs can exceed int32)
         try:
