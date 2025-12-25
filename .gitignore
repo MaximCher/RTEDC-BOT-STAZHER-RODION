@@ -21,5 +21,8 @@ python_bot/data/
 # Local secrets (do not commit)
 python_bot/.secrets/
 
+# Cursor / Playwright artifacts
+.playwright-mcp/
+
 
 
