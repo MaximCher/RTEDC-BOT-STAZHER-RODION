@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database import get_session_factory
@@ -166,15 +166,21 @@ def register_api(app: FastAPI) -> None:
         dialogs_q = select(func.count(func.distinct(DialogMessage.user_id)))
         messages_q = select(func.count(DialogMessage.id))
         leads_q = select(func.count(BitrixLead.id))
-        leads_by_service_q = select(BitrixLead.service, func.count(BitrixLead.id)).group_by(BitrixLead.service)
+        leads_by_service_q = select(BitrixLead.service, func.count(BitrixLead.id)).group_by(
+            BitrixLead.service
+        )
+        # IMPORTANT: Use the same bind parameter instance for SELECT and GROUP BY.
+        # Otherwise Postgres sees `$1` vs `$2` and throws GroupingError.
+        unknown = literal("unknown")
+        service_expr = func.coalesce(UserMemory.selected_service, unknown)
         users_by_service_q = (
             select(
-                func.coalesce(UserMemory.selected_service, "unknown").label("service"),
+                service_expr.label("service"),
                 func.count(func.distinct(DialogMessage.user_id)).label("users"),
             )
             .select_from(DialogMessage)
             .join(UserMemory, UserMemory.user_id == DialogMessage.user_id, isouter=True)
-            .group_by(func.coalesce(UserMemory.selected_service, "unknown"))
+            .group_by(service_expr)
         )
 
         if start_dt is not None:
