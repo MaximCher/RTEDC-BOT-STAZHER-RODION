@@ -42,14 +42,16 @@ async def init_db() -> None:
     global _engine, _session_factory
 
     connect_args: dict = {}
-    # Supabase managed Postgres typically requires SSL. asyncpg supports ssl as a string:
-    # 'disable'|'prefer'|'allow'|'require'|'verify-ca'|'verify-full' (default: 'prefer').
+    # Supabase managed Postgres typically requires SSL.
+    # asyncpg supports ssl as a string:
+    # disable|prefer|allow|require|verify-ca|verify-full (default: prefer).
     sslmode = (settings.postgres_sslmode or "").strip().lower()
     if sslmode:
         connect_args["ssl"] = sslmode
 
     # Supabase Transaction Pooler (6543) does not support prepared statements.
-    # asyncpg uses prepared statements under the hood; disable its statement cache.
+    # asyncpg uses prepared statements under the hood, so we disable its
+    # statement cache for transaction poolers.
     try:
         parsed = urlparse(settings.database_url)
         host = (parsed.hostname or "").lower()
@@ -78,7 +80,8 @@ async def init_db() -> None:
     async with _engine.begin() as conn:
         # tables
         await conn.run_sync(Base.metadata.create_all)
-        # Hotfix: bot_id for bot_heartbeat must be bigint (Telegram IDs can exceed int32)
+        # Hotfix: bot_id for bot_heartbeat must be bigint
+        # (Telegram IDs can exceed int32)
         try:
             await conn.execute(
                 text(
