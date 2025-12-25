@@ -25,6 +25,13 @@ body {
 }
 
 @media (max-width: 420px) {
+  .navbar .container-xl {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .navbar-brand {
+    width: 100%;
+  }
   .navbar-nav {
     width: 100%;
   }
