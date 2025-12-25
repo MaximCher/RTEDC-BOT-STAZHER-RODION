@@ -25,9 +25,14 @@ fi
 # We keep forwarding logs to stdout so systemd/journalctl shows them too.
 ${TUNA_BIN} http "${PORT}" "${SUBDOMAIN_ARGS[@]}" 2>&1 | while IFS= read -r line; do
   echo "${line}"
-  if [[ "${line}" =~ Forwarding\ (https://[^[:space:]]+)\ -> ]]; then
-    url="${BASH_REMATCH[1]}"
-    ( umask 022 && echo "${url}" > "${OUT_FILE}" ) || true
+  # Example line:
+  #   INFO[...] Forwarding https://xxxx.ru.tuna.am -> 127.0.0.1:80
+  if [[ "${line}" == *"Forwarding https://"*" -> "* ]]; then
+    url="${line#*Forwarding }"
+    url="${url%% ->*}"
+    if [[ "${url}" == https://* ]]; then
+      ( umask 022 && echo "${url}" > "${OUT_FILE}" ) || true
+    fi
   fi
 done
 
