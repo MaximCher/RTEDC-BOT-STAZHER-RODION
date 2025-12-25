@@ -46,6 +46,7 @@ jobs:
       ADMIN_USER_IDS: ${{ secrets.ADMIN_USER_IDS }}
       TUNA_TOKEN: ${{ secrets.TUNA_TOKEN }}
       TUNA_HTTP_PORT: ${{ secrets.TUNA_HTTP_PORT }}
+      TUNA_SUBDOMAIN: ${{ secrets.TUNA_SUBDOMAIN }}
       LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
       DEBUG_MODE: ${{ secrets.DEBUG_MODE }}
     steps:
@@ -101,6 +102,7 @@ jobs:
           LOG_LEVEL="${LOG_LEVEL:-INFO}"
           DEBUG_MODE="${DEBUG_MODE:-false}"
           TUNA_HTTP_PORT="${TUNA_HTTP_PORT:-80}"
+          TUNA_SUBDOMAIN="${TUNA_SUBDOMAIN:-}"
 
           ssh -p "${DEPLOY_PORT}" "${DEPLOY_USER}@${DEPLOY_HOST}" "bash -lc 'set -euo pipefail
             cd \"${DEPLOY_PATH}/python_bot\"
@@ -141,6 +143,7 @@ ADMIN_USER_IDS=${ADMIN_USER_IDS}
 
 TUNA_TOKEN=${TUNA_TOKEN}
 TUNA_HTTP_PORT=${TUNA_HTTP_PORT}
+TUNA_SUBDOMAIN=${TUNA_SUBDOMAIN}
 EOF
             chmod 600 .env
           '"

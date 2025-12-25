@@ -12,6 +12,7 @@ from src.database import get_session_factory
 from src.handlers import get_routers
 from src.logger import logger
 from src.services.heartbeat_service import heartbeat_loop
+from src.services.webapp_menu_service import webapp_menu_button_sync_loop
 
 
 class DbSessionMiddleware(BaseMiddleware):
@@ -58,6 +59,14 @@ async def run_bot(token: str) -> None:
                 stop_event=stop_event,
             )
         )
+        webapp_task = asyncio.create_task(
+            webapp_menu_button_sync_loop(
+                bot=bot,
+                session_factory=session_factory,
+                stop_event=stop_event,
+                interval_sec=20,
+            )
+        )
         await dp.start_polling(bot)
     except Exception as e:
         logger.error("bot_polling_failed", error=str(e))
@@ -66,6 +75,10 @@ async def run_bot(token: str) -> None:
         stop_event.set()
         try:
             hb_task.cancel()
+        except Exception:
+            pass
+        try:
+            webapp_task.cancel()
         except Exception:
             pass
         await bot.session.close()
