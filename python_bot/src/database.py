@@ -13,6 +13,7 @@ from sqlalchemy.orm import declarative_base
 from sqlalchemy.pool import NullPool
 from src.config import settings
 from src.logger import logger
+from urllib.parse import urlparse
 
 Base = declarative_base()
 
@@ -40,12 +41,23 @@ async def init_db() -> None:
     """Initialize engine and create tables."""
     global _engine, _session_factory
 
-    connect_args = {}
+    connect_args: dict = {}
     # Supabase managed Postgres typically requires SSL. asyncpg supports ssl as a string:
     # 'disable'|'prefer'|'allow'|'require'|'verify-ca'|'verify-full' (default: 'prefer').
     sslmode = (settings.postgres_sslmode or "").strip().lower()
     if sslmode:
         connect_args["ssl"] = sslmode
+
+    # Supabase Transaction Pooler (6543) does not support prepared statements.
+    # asyncpg uses prepared statements under the hood; disable its statement cache.
+    try:
+        parsed = urlparse(settings.database_url)
+        host = (parsed.hostname or "").lower()
+        port = parsed.port
+        if port == 6543 or host.endswith("pooler.supabase.com"):
+            connect_args["statement_cache_size"] = 0
+    except Exception:
+        pass
 
     _engine = create_async_engine(
         settings.database_url,
