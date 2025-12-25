@@ -83,6 +83,12 @@ async def init_db() -> None:
     from src import models  # noqa: F401
 
     async with _engine.begin() as conn:
+        # Ensure pgvector is available (Supabase requires enabling extension).
+        try:
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        except Exception:
+            # Extension may be disabled or user may not have permission; ignore.
+            pass
         # tables
         await conn.run_sync(Base.metadata.create_all)
         # Hotfix: bot_id for bot_heartbeat must be bigint
