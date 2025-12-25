@@ -19,6 +19,7 @@ from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
 from src.models.staff import StaffMember
 from src.models.staff_invite import StaffInvite
+from src.models.bot_heartbeat import BotHeartbeat
 from src.utils.webapp_url import get_webapp_public_url
 from src.web.auth import (
     SESSION_KEY,
@@ -71,6 +72,34 @@ async def _get_session() -> AsyncSession:
 
 
 def register_api(app: FastAPI) -> None:
+    async def _resolve_bot_username(session: AsyncSession) -> Optional[str]:
+        # Prefer DB heartbeat (no extra network calls).
+        try:
+            hb = (
+                await session.execute(
+                    select(BotHeartbeat).order_by(BotHeartbeat.updated_at.desc()).limit(1)
+                )
+            ).scalar_one_or_none()
+            if hb and hb.bot_username:
+                return str(hb.bot_username).lstrip("@")
+        except Exception:
+            pass
+        # Fallback to explicit env var
+        if settings.telegram_bot_username:
+            return settings.telegram_bot_username.lstrip("@")
+        # Last resort: call Telegram API (bot token is already in env for bot)
+        try:
+            import httpx
+
+            token = settings.telegram_bot_token
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(f"https://api.telegram.org/bot{token}/getMe")
+                data = resp.json()
+            if resp.status_code == 200 and data.get("ok") and data.get("result", {}).get("username"):
+                return str(data["result"]["username"]).lstrip("@")
+        except Exception:
+            pass
+        return None
     @app.post("/api/login")
     async def login(request: Request, payload: LoginRequest) -> JSONResponse:
         validate_password(payload.password)
@@ -504,10 +533,11 @@ def register_api(app: FastAPI) -> None:
         await session.commit()
         await session.refresh(inv)
 
-        # Full link requires bot username; otherwise return payload to paste manually.
-        if settings.telegram_bot_username:
-            url = f"https://t.me/{settings.telegram_bot_username}?start=invite_{token}"
+        bot_username = await _resolve_bot_username(session)
+        if bot_username:
+            url = f"https://t.me/{bot_username}?start=invite_{token}"
         else:
+            # Extremely unlikely (bot heartbeat not written yet), but still return something.
             url = f"invite_{token}"
         return {
             "success": True,

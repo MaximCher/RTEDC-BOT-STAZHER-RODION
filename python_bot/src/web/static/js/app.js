@@ -657,20 +657,30 @@ async function createInvite() {
     method: "POST",
     body: JSON.stringify({ role, ttl_hours: ttlHours }),
   });
-  qs("invite-link").value = data.url || "";
+  const url = String(data?.url || "").trim();
+  window.__currentInviteUrl = url;
+  const a = qs("invite-link");
+  if (a) {
+    a.href = url || "#";
+    a.textContent = url || "Ссылка появится здесь…";
+  }
 }
 
 function copyInvite() {
-  const el = qs("invite-link");
-  const value = el.value || "";
-  if (!value) return;
-  el.select();
-  el.setSelectionRange(0, value.length);
-  try {
-    document.execCommand("copy");
-  } catch (e) {
-    // ignore
+  const url = window.__currentInviteUrl || "";
+  if (!url) return;
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(url).catch(() => {});
+    return;
   }
+  try {
+    const tmp = document.createElement("input");
+    tmp.value = url;
+    document.body.appendChild(tmp);
+    tmp.select();
+    document.execCommand("copy");
+    document.body.removeChild(tmp);
+  } catch (e) {}
 }
 
 async function addStaff() {

@@ -177,15 +177,23 @@
                       </button>
                     </div>
                     <div class="col-12">
-                      <input
-                        id="invite-link"
-                        type="text"
-                        class="form-control"
-                        readonly
-                        placeholder="Ссылка появится здесь…"
-                      />
+                      <div class="input-group">
+                        <a
+                          id="invite-link"
+                          class="form-control text-truncate"
+                          href="#"
+                          target="_blank"
+                          rel="noreferrer"
+                          style="text-decoration: none"
+                        >
+                          Ссылка появится здесь…
+                        </a>
+                        <button class="btn btn-outline-secondary" type="button" onclick="copyInvite()">
+                          Копировать
+                        </button>
+                      </div>
                       <div class="text-secondary small mt-1">
-                        Если ссылка вида <code>invite_...</code> — укажите <code>TELEGRAM_BOT_USERNAME</code> в .env, чтобы формировать полноценный <code>t.me</code> URL.
+                        Откройте ссылку или отправьте её сотруднику. По переходу бот добавит пользователя в staff.
                       </div>
                     </div>
                   </div>
