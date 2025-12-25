@@ -117,41 +117,80 @@ async function loadStats() {
 
   const renderKvList = (obj) => {
     const entries = Object.entries(obj || {});
-    if (!entries.length) return `<div class="muted">—</div>`;
+    if (!entries.length) return `<div class="text-secondary">—</div>`;
     return `
-      <div class="kv">
-        ${entries
-          .sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0))
-          .map(([k, v]) => `<div class="kv-row"><div class="k">${escapeHtml(k)}</div><div class="v">${escapeHtml(String(v))}</div></div>`)
-          .join("")}
+      <div class="table-responsive">
+        <table class="table table-vcenter table-sm">
+          <tbody>
+            ${entries
+              .sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0))
+              .map(
+                ([k, v]) => `
+                  <tr>
+                    <td class="text-secondary">${escapeHtml(k)}</td>
+                    <td class="text-end fw-bold">${escapeHtml(String(v))}</td>
+                  </tr>
+                `
+              )
+              .join("")}
+          </tbody>
+        </table>
       </div>
     `;
   };
 
   container.innerHTML = `
-    <div class="stat">
-      <div class="label">Уникальные пользователи</div>
-      <div class="value">${stats.dialogs_total}</div>
+    <div class="col-6 col-lg-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="subheader">Уникальные пользователи</div>
+          <div class="h1 mb-0">${stats.dialogs_total}</div>
+        </div>
+      </div>
     </div>
-    <div class="stat">
-      <div class="label">Сообщения</div>
-      <div class="value">${stats.messages_total}</div>
+    <div class="col-6 col-lg-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="subheader">Сообщения</div>
+          <div class="h1 mb-0">${stats.messages_total}</div>
+        </div>
+      </div>
     </div>
-    <div class="stat">
-      <div class="label">Лиды (Bitrix log)</div>
-      <div class="value">${stats.leads_total}</div>
+    <div class="col-6 col-lg-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="subheader">Лиды (Bitrix log)</div>
+          <div class="h1 mb-0">${stats.leads_total}</div>
+        </div>
+      </div>
     </div>
-    <div class="stat">
-      <div class="label">Конверсия в лид</div>
-      <div class="value">${convPct}%</div>
+    <div class="col-6 col-lg-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="subheader">Конверсия в лид</div>
+          <div class="h1 mb-0">${convPct}%</div>
+        </div>
+      </div>
     </div>
-    <div class="stat wide">
-      <div class="label">Пользователи по услугам</div>
-      ${renderKvList(usersByService)}
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Пользователи по услугам</div>
+        </div>
+        <div class="card-body">
+          ${renderKvList(usersByService)}
+        </div>
+      </div>
     </div>
-    <div class="stat wide">
-      <div class="label">Лиды по услугам</div>
-      ${renderKvList(leadsByService)}
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Лиды по услугам</div>
+        </div>
+        <div class="card-body">
+          ${renderKvList(leadsByService)}
+        </div>
+      </div>
     </div>
   `;
 }
@@ -171,57 +210,96 @@ async function loadFunnel() {
   destroyCharts();
 
   container.innerHTML = `
-    <div class="stat wide">
-      <div class="label">Воронка (уникальные пользователи по шагам)</div>
-      <div class="chart-wrap tall">
-        <canvas id="chart-funnel-counts"></canvas>
-      </div>
-      <div class="kv">
-        <div class="kv-row"><div class="k">1) Вошли в услугу</div><div class="v">${counts.entry_service || 0}</div></div>
-        <div class="kv-row"><div class="k">2) Старт квиза/калькулятора/анкеты</div><div class="v">${counts.engagement_start || 0}</div></div>
-        <div class="kv-row"><div class="k">3) Дошли до результата</div><div class="v">${counts.engagement_complete || 0}</div></div>
-        <div class="kv-row"><div class="k">4) Нажали «Оставить заявку»</div><div class="v">${counts.cta_lead_start || 0}</div></div>
-        <div class="kv-row"><div class="k">5) Оставили контакт</div><div class="v">${counts.contact_submitted || 0}</div></div>
-        <div class="kv-row"><div class="k">6) Выбрали/ввели окно созвона</div><div class="v">${counts.meeting_window || 0}</div></div>
-        <div class="kv-row"><div class="k">7) Лид создан</div><div class="v">${counts.lead_created || 0}</div></div>
-      </div>
-    </div>
-    <div class="stat wide">
-      <div class="label">Конверсия по этапам</div>
-      <div class="chart-wrap">
-        <canvas id="chart-funnel-conv"></canvas>
-      </div>
-      <div class="kv">
-        <div class="kv-row"><div class="k">Вход → старт</div><div class="v">${pct(conv.entry_to_start)}</div></div>
-        <div class="kv-row"><div class="k">Старт → результат</div><div class="v">${pct(conv.start_to_complete)}</div></div>
-        <div class="kv-row"><div class="k">Результат → «заявка»</div><div class="v">${pct(conv.complete_to_cta)}</div></div>
-        <div class="kv-row"><div class="k">«Заявка» → контакт</div><div class="v">${pct(conv.cta_to_contact)}</div></div>
-        <div class="kv-row"><div class="k">Контакт → окно</div><div class="v">${pct(conv.contact_to_meeting)}</div></div>
-        <div class="kv-row"><div class="k">Окно → лид</div><div class="v">${pct(conv.meeting_to_lead)}</div></div>
-        <div class="kv-row"><div class="k">Вход → лид</div><div class="v">${pct(conv.entry_to_lead)}</div></div>
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Воронка (уникальные пользователи по шагам)</div>
+        </div>
+        <div class="card-body">
+          <div class="chart-wrap tall">
+            <canvas id="chart-funnel-counts"></canvas>
+          </div>
+          <div class="table-responsive mt-3">
+            <table class="table table-vcenter table-sm">
+              <tbody>
+                <tr><td class="text-secondary">1) Вошли в услугу</td><td class="text-end fw-bold">${counts.entry_service || 0}</td></tr>
+                <tr><td class="text-secondary">2) Старт квиза/калькулятора/анкеты</td><td class="text-end fw-bold">${counts.engagement_start || 0}</td></tr>
+                <tr><td class="text-secondary">3) Дошли до результата</td><td class="text-end fw-bold">${counts.engagement_complete || 0}</td></tr>
+                <tr><td class="text-secondary">4) Нажали «Оставить заявку»</td><td class="text-end fw-bold">${counts.cta_lead_start || 0}</td></tr>
+                <tr><td class="text-secondary">5) Оставили контакт</td><td class="text-end fw-bold">${counts.contact_submitted || 0}</td></tr>
+                <tr><td class="text-secondary">6) Выбрали/ввели окно созвона</td><td class="text-end fw-bold">${counts.meeting_window || 0}</td></tr>
+                <tr><td class="text-secondary">7) Лид создан</td><td class="text-end fw-bold">${counts.lead_created || 0}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
-    <div class="stat wide">
-      <div class="label">Конверсия в лид по услугам</div>
-      <div class="chart-wrap">
-        <canvas id="chart-service-lead"></canvas>
-      </div>
-      <div class="muted chart-note">
-        Метрика: «Вход → лид» (уникальные пользователи). Чем выше — тем лучше.
+
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Конверсия по этапам</div>
+        </div>
+        <div class="card-body">
+          <div class="chart-wrap">
+            <canvas id="chart-funnel-conv"></canvas>
+          </div>
+          <div class="table-responsive mt-3">
+            <table class="table table-vcenter table-sm">
+              <tbody>
+                <tr><td class="text-secondary">Вход → старт</td><td class="text-end fw-bold">${pct(conv.entry_to_start)}</td></tr>
+                <tr><td class="text-secondary">Старт → результат</td><td class="text-end fw-bold">${pct(conv.start_to_complete)}</td></tr>
+                <tr><td class="text-secondary">Результат → «заявка»</td><td class="text-end fw-bold">${pct(conv.complete_to_cta)}</td></tr>
+                <tr><td class="text-secondary">«Заявка» → контакт</td><td class="text-end fw-bold">${pct(conv.cta_to_contact)}</td></tr>
+                <tr><td class="text-secondary">Контакт → окно</td><td class="text-end fw-bold">${pct(conv.contact_to_meeting)}</td></tr>
+                <tr><td class="text-secondary">Окно → лид</td><td class="text-end fw-bold">${pct(conv.meeting_to_lead)}</td></tr>
+                <tr><td class="text-secondary">Вход → лид</td><td class="text-end fw-bold">${pct(conv.entry_to_lead)}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
-    <div class="stat wide">
-      <div class="label">Где отваливаются (уникальные)</div>
-      <div class="kv">
-        <div class="kv-row"><div class="k">После входа (не стартуют)</div><div class="v">${drops.drop_entry || 0}</div></div>
-        <div class="kv-row"><div class="k">После старта (не доходят до результата)</div><div class="v">${drops.drop_start || 0}</div></div>
-        <div class="kv-row"><div class="k">После результата (не жмут «заявка»)</div><div class="v">${drops.drop_complete || 0}</div></div>
-        <div class="kv-row"><div class="k">После «заявка» (не оставляют контакт)</div><div class="v">${drops.drop_cta || 0}</div></div>
-        <div class="kv-row"><div class="k">После контакта (не выбирают окно)</div><div class="v">${drops.drop_contact || 0}</div></div>
-        <div class="kv-row"><div class="k">После окна (лид не создан)</div><div class="v">${drops.drop_meeting || 0}</div></div>
+
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Конверсия в лид по услугам</div>
+        </div>
+        <div class="card-body">
+          <div class="chart-wrap">
+            <canvas id="chart-service-lead"></canvas>
+          </div>
+          <div class="text-secondary mt-2">
+            Метрика: «Вход → лид» (уникальные пользователи). Чем выше — тем лучше.
+          </div>
+        </div>
       </div>
-      <div class="muted" style="margin-top:8px">
-        Примечание: это метрики по событиям. Если пользователей пока мало — цифры могут быть нулевые.
+    </div>
+
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Где отваливаются (уникальные)</div>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-vcenter table-sm">
+              <tbody>
+                <tr><td class="text-secondary">После входа (не стартуют)</td><td class="text-end fw-bold">${drops.drop_entry || 0}</td></tr>
+                <tr><td class="text-secondary">После старта (не доходят до результата)</td><td class="text-end fw-bold">${drops.drop_start || 0}</td></tr>
+                <tr><td class="text-secondary">После результата (не жмут «заявка»)</td><td class="text-end fw-bold">${drops.drop_complete || 0}</td></tr>
+                <tr><td class="text-secondary">После «заявка» (не оставляют контакт)</td><td class="text-end fw-bold">${drops.drop_cta || 0}</td></tr>
+                <tr><td class="text-secondary">После контакта (не выбирают окно)</td><td class="text-end fw-bold">${drops.drop_contact || 0}</td></tr>
+                <tr><td class="text-secondary">После окна (лид не создан)</td><td class="text-end fw-bold">${drops.drop_meeting || 0}</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="text-secondary mt-2">
+            Примечание: это метрики по событиям. Если пользователей пока мало — цифры могут быть нулевые.
+          </div>
+        </div>
       </div>
     </div>
   `;
@@ -379,52 +457,66 @@ async function loadUsers() {
   const data = await api(`/api/users${q}`);
   const container = qs("users-list");
   if (!data.users.length) {
-    container.innerHTML = `<div class="muted">Пока нет диалогов.</div>`;
+    container.innerHTML = `<div class="text-secondary">Пока нет диалогов.</div>`;
     return;
   }
-  container.innerHTML = data.users
-    .map((u) => {
-      const title = u.full_name || `User ${u.user_id}`;
-      const phone = u.phone ? `📞 ${u.phone}` : "";
-      const username = u.username ? `@${u.username}` : "";
-      const meta = [phone, username].filter(Boolean).join(" · ");
-      return `
-        <div class="user" onclick="openConversation(${u.user_id})">
-          <div class="row">
-            <div class="name">${escapeHtml(title)}</div>
-            <div class="muted">${u.message_count}</div>
-          </div>
-          <div class="meta">${escapeHtml(meta || "—")}</div>
-          <div class="meta">Последнее: ${fmtDate(u.last_message_at)}</div>
-        </div>
-      `;
-    })
-    .join("");
+  container.innerHTML = `
+    <div class="list-group list-group-flush">
+      ${data.users
+        .map((u) => {
+          const title = u.full_name || `User ${u.user_id}`;
+          const phone = u.phone ? `📞 ${u.phone}` : "";
+          const username = u.username ? `@${u.username}` : "";
+          const meta = [phone, username].filter(Boolean).join(" · ");
+          return `
+            <a href="#" class="list-group-item list-group-item-action" onclick="openConversation(${u.user_id}); return false;">
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <div class="fw-bold">${escapeHtml(title)}</div>
+                <span class="badge bg-blue-lt">${escapeHtml(String(u.message_count || 0))}</span>
+              </div>
+              <div class="text-secondary small mt-1">${escapeHtml(meta || "—")}</div>
+              <div class="text-secondary small">Последнее: ${fmtDate(u.last_message_at)}</div>
+            </a>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
 }
 
 async function loadStaff() {
   const data = await api(`/api/staff`);
   const container = qs("staff-list");
   if (!data.items || !data.items.length) {
-    container.innerHTML = `<div class="muted">Список пуст.</div>`;
+    container.innerHTML = `<div class="text-secondary">Список пуст.</div>`;
     return;
   }
-  container.innerHTML = data.items
-    .map((m) => {
-      return `
-        <div class="user">
-          <div class="row">
-            <div class="name">${escapeHtml(String(m.tg_user_id))}</div>
-            <div class="muted">${escapeHtml(m.role)}</div>
-          </div>
-          <div class="meta">Добавлен: ${fmtDate(m.created_at)}</div>
-          <div class="meta">
-            <a href="#" onclick="removeStaff(${m.tg_user_id}); return false;">Удалить</a>
-          </div>
-        </div>
-      `;
-    })
-    .join("");
+  container.innerHTML = `
+    <div class="list-group">
+      ${data.items
+        .map((m) => {
+          return `
+            <div class="list-group-item">
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <div>
+                  <div class="fw-bold">${escapeHtml(String(m.tg_user_id))}</div>
+                  <div class="text-secondary small">Добавлен: ${fmtDate(m.created_at)}</div>
+                </div>
+                <div class="text-end">
+                  <div class="badge bg-azure-lt">${escapeHtml(m.role)}</div>
+                  <div class="mt-2">
+                    <button class="btn btn-sm btn-outline-danger" onclick="removeStaff(${m.tg_user_id}); return false;">
+                      Удалить
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
 }
 
 async function addStaff() {
@@ -457,7 +549,7 @@ async function openConversation(userId) {
 
   const container = qs("messages");
   if (!messages.length) {
-    container.innerHTML = `<div class="muted">Сообщений нет.</div>`;
+    container.innerHTML = `<div class="text-secondary">Сообщений нет.</div>`;
     return;
   }
   container.innerHTML = messages

@@ -4,80 +4,169 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SRVT Admin Panel</title>
+    <!-- Tabler UI (Bootstrap 5 based) -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/@tabler/core@latest/dist/css/tabler.min.css"
+    />
     <link rel="stylesheet" href="/static/css/style.css" />
   </head>
   <body>
-    <div id="login-screen" class="card">
-      <h1>SRVT Admin Panel</h1>
-      <p class="muted">История диалогов и статистика</p>
-      <input type="password" id="password-input" placeholder="Пароль" />
-      <button id="login-btn" onclick="login()">Войти</button>
-      <div id="login-error" class="error"></div>
+    <!-- Login screen -->
+    <div id="login-screen" class="page page-center">
+      <div class="container container-tight py-4">
+        <div class="text-center mb-4">
+          <div class="h1 mb-1">SRVT Admin Panel</div>
+          <div class="text-secondary">История диалогов и статистика</div>
+        </div>
+        <div class="card card-md">
+          <div class="card-body">
+            <div class="mb-3">
+              <label class="form-label">Пароль</label>
+              <input
+                type="password"
+                class="form-control"
+                id="password-input"
+                placeholder="Введите пароль"
+                autocomplete="current-password"
+              />
+            </div>
+            <button id="login-btn" class="btn btn-primary w-100" onclick="login()">
+              Войти
+            </button>
+            <div id="login-error" class="text-danger mt-3 small"></div>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <div id="main-panel" style="display: none">
-      <header class="header">
-        <div>
-          <div class="title">SRVT — История диалогов</div>
-          <div class="muted">Фильтр по датам влияет на список пользователей и статистику.</div>
-        </div>
-        <div class="header-actions">
-          <button class="secondary" onclick="logout()">Выйти</button>
+    <!-- Main panel -->
+    <div id="main-panel" class="page" style="display: none">
+      <header class="navbar navbar-expand-sm navbar-light d-print-none">
+        <div class="container-xl">
+          <div class="navbar-brand">
+            <strong>SRVT — История диалогов</strong>
+            <div class="text-secondary small">
+              Фильтр по датам влияет на список пользователей и статистику.
+            </div>
+          </div>
+          <div class="navbar-nav flex-row order-md-last">
+            <div class="nav-item">
+              <button class="btn btn-outline-primary" onclick="logout()">
+                Выйти
+              </button>
+            </div>
+          </div>
         </div>
       </header>
 
-      <section class="filters">
-        <div class="field">
-          <label>Дата от</label>
-          <input type="date" id="start-date" />
-        </div>
-        <div class="field">
-          <label>Дата до</label>
-          <input type="date" id="end-date" />
-        </div>
-        <div class="field">
-          <label>&nbsp;</label>
-          <button onclick="reloadAll()">Обновить</button>
-        </div>
-      </section>
+      <div class="page-wrapper">
+        <div class="page-body">
+          <div class="container-xl">
+            <!-- Filters -->
+            <div class="card mb-3">
+              <div class="card-body">
+                <div class="row g-3 align-items-end">
+                  <div class="col-12 col-md-4">
+                    <label class="form-label">Дата от</label>
+                    <input class="form-control" type="date" id="start-date" />
+                  </div>
+                  <div class="col-12 col-md-4">
+                    <label class="form-label">Дата до</label>
+                    <input class="form-control" type="date" id="end-date" />
+                  </div>
+                  <div class="col-12 col-md-4">
+                    <label class="form-label">&nbsp;</label>
+                    <button class="btn btn-primary w-100" onclick="reloadAll()">
+                      Обновить
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-      <section id="stats" class="stats"></section>
-      <section id="funnel" class="stats"></section>
+            <!-- Stats + Funnel -->
+            <div class="row row-deck row-cards mb-3">
+              <div class="col-12">
+                <div id="stats" class="row row-deck row-cards"></div>
+              </div>
+              <div class="col-12">
+                <div id="funnel" class="row row-deck row-cards"></div>
+              </div>
+            </div>
 
-      <section class="staff">
-        <div class="staff-head">
-          <h2>Админы / менеджеры</h2>
-          <div class="muted">Управление доступом к админке и ролями.</div>
-        </div>
-        <div class="staff-form">
-          <input id="staff-tg-id" type="text" placeholder="Telegram user_id (число)" />
-          <select id="staff-role">
-            <option value="admin">admin</option>
-            <option value="manager">manager</option>
-          </select>
-          <button onclick="addStaff()">Добавить</button>
-        </div>
-        <div id="staff-list" class="list"></div>
-      </section>
+            <!-- Staff -->
+            <div class="card mb-3">
+              <div class="card-header">
+                <div>
+                  <div class="card-title">Админы / менеджеры</div>
+                  <div class="text-secondary">
+                    Управление доступом к админке и ролями.
+                  </div>
+                </div>
+              </div>
+              <div class="card-body">
+                <div class="row g-2">
+                  <div class="col-12 col-md-6">
+                    <input
+                      id="staff-tg-id"
+                      type="text"
+                      class="form-control"
+                      placeholder="Telegram user_id (число)"
+                    />
+                  </div>
+                  <div class="col-12 col-md-3">
+                    <select id="staff-role" class="form-select">
+                      <option value="admin">admin</option>
+                      <option value="manager">manager</option>
+                    </select>
+                  </div>
+                  <div class="col-12 col-md-3">
+                    <button class="btn btn-primary w-100" onclick="addStaff()">
+                      Добавить
+                    </button>
+                  </div>
+                </div>
+                <div class="mt-3">
+                  <div id="staff-list" class="vstack gap-2"></div>
+                </div>
+              </div>
+            </div>
 
-      <div class="layout">
-        <section class="users">
-          <h2>Пользователи</h2>
-          <div id="users-list" class="list"></div>
-        </section>
-
-        <section class="conversation">
-          <div class="conversation-head">
-            <h2 id="conversation-title">Диалог</h2>
-            <div class="muted" id="conversation-meta"></div>
+            <!-- Users + Dialog -->
+            <div class="row g-3">
+              <div class="col-12 col-lg-4">
+                <div class="card">
+                  <div class="card-header">
+                    <div class="card-title">Пользователи</div>
+                  </div>
+                  <div class="card-body">
+                    <div id="users-list" class="vstack gap-2"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-12 col-lg-8">
+                <div class="card">
+                  <div class="card-header">
+                    <div>
+                      <div class="card-title" id="conversation-title">Диалог</div>
+                      <div class="text-secondary small" id="conversation-meta"></div>
+                    </div>
+                  </div>
+                  <div class="card-body">
+                    <div id="messages" class="messages"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-          <div id="messages" class="messages"></div>
-        </section>
+        </div>
       </div>
     </div>
 
     <!-- Charts: Chart.js (CDN). Used only in admin panel UI. -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://unpkg.com/@tabler/core@latest/dist/js/tabler.min.js"></script>
     <script src="/static/js/app.js"></script>
   </body>
 </html>
