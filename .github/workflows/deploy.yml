@@ -148,6 +148,20 @@ jobs:
             chmod 600 .env
           '"
 
+      - name: Write release info (.release) on server
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEPLOYED_AT_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          ssh -p "${DEPLOY_PORT}" "${DEPLOY_USER}@${DEPLOY_HOST}" "bash -lc 'set -euo pipefail
+            cd \"${DEPLOY_PATH}/python_bot\"
+            cat > .release <<EOF
+          sha=${GITHUB_SHA}
+          deployed_at_utc=${DEPLOYED_AT_UTC}
+          EOF
+            chmod 644 .release
+          '"
+
       - name: Deploy (docker compose prod)
         shell: bash
         run: |

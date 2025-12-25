@@ -38,6 +38,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./.tuna_url:/app/.tuna_url:ro
+      - ./.release:/app/.release:ro
     command: python -m src.main
     restart: unless-stopped
     logging:
@@ -62,6 +63,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./.tuna_url:/app/.tuna_url:ro
+      - ./.release:/app/.release:ro
     logging:
       driver: json-file
       options:

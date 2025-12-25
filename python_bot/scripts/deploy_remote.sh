@@ -37,6 +37,7 @@ fi
 
 # Ensure tuna URL file exists (docker bind mount expects a file, not a directory).
 touch .tuna_url || true
+touch .release || true
 
 # Build + restart services
 docker compose -f "${COMPOSE_FILE}" up -d --build --remove-orphans

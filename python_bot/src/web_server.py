@@ -13,6 +13,7 @@ from src.logger import setup_logging
 from src.utils.rate_limit import FixedWindowLimiter
 from src.web.api import register_api
 from src.web.health import check_bot_heartbeat, check_db, check_openai
+from src.utils.release import read_release_file
 
 # mypy: ignore-errors
 # pyright: reportMissingImports=false, reportMissingTypeStubs=false
@@ -72,8 +73,14 @@ def create_app() -> FastAPI:
             openai_payload["checked"] = True
 
         overall = bool(db_ok and bot.get("ok"))
+        release = read_release_file()
         return {
             "ok": overall,
+            "release": {
+                "sha": release.sha,
+                "deployed_at_utc": release.deployed_at_utc,
+                "source": release.source,
+            },
             "db": {"ok": db_ok},
             "bot": bot,
             "openai": openai_payload,
