@@ -11,6 +11,7 @@ from src.services.staff_service import is_admin
 from src.utils.service_entry import entry_screen_for_service
 from src.utils.keyboards import services_keyboard
 from src.utils.messages import msg
+from src.utils.webapp_url import get_webapp_public_url
 
 
 router = Router()
@@ -26,7 +27,9 @@ async def cmd_start(message: Message, state: FSMContext, session: AsyncSession) 
                 chat_id=message.chat.id,
                 menu_button=MenuButtonWebApp(
                     text="Админка SRVT",
-                    web_app=WebAppInfo(url=settings.webapp_public_url),
+                    web_app=WebAppInfo(
+                        url=get_webapp_public_url(settings.webapp_public_url)
+                    ),
                 ),
             )
     except Exception:
