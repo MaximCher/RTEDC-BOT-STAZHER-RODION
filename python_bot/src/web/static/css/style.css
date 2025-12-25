@@ -5,6 +5,34 @@ body {
   background: #f6f7fb;
 }
 
+/* Telegram Mini App viewport is narrow; prevent header text from overflowing */
+.navbar .container-xl {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.navbar-brand {
+  white-space: normal !important;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.navbar-brand a {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+@media (max-width: 420px) {
+  .navbar-nav {
+    width: 100%;
+  }
+  .navbar-nav .btn {
+    width: 100%;
+  }
+}
+
 code {
   background: rgba(37, 99, 235, 0.08);
   padding: 2px 6px;
