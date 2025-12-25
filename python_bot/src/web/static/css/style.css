@@ -32,25 +32,34 @@ code {
 
 .msg {
   border-radius: 12px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border: 1px solid rgba(98, 105, 118, 0.18);
   white-space: pre-wrap;
-  line-height: 1.35;
+  line-height: 1.32;
+  font-size: 13px;
+  max-width: 78%;
+  word-break: break-word;
 }
 
 .msg.user {
   background: #eff6ff;
-  margin-left: 18px;
+  margin-left: auto;
 }
 
 .msg.assistant {
   background: #f8fafc;
-  margin-right: 18px;
+  margin-right: auto;
 }
 
 .msg.system {
   background: #fff7ed;
-  margin-right: 18px;
+  margin-right: auto;
+}
+
+.msg.event {
+  background: #f1f5f9;
+  margin-right: auto;
+  border-style: dashed;
 }
 
 .msg .head {
@@ -69,33 +78,13 @@ code {
   margin-bottom: 12px;
 }
 
-.messages .message {
-  border-radius: 12px;
-  padding: 12px;
-  margin-bottom: 10px;
-  border: 1px solid #e5e7eb;
+.msg .event-title {
+  font-weight: 600;
 }
 
-.messages .message.user {
-  background: #e0f2fe;
-}
-
-.messages .message.assistant {
-  background: #f3f4f6;
-}
-
-.message-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 8px;
-  color: #6b7280;
+.msg .event-meta {
+  color: #64748b;
   font-size: 12px;
+  margin-top: 4px;
 }
-
-.message-text {
-  white-space: pre-wrap;
-  line-height: 1.45;
-}
-
 

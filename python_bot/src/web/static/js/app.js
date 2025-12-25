@@ -23,13 +23,13 @@ function fmtDate(iso) {
 }
 
 const SERVICE_LABELS = {
-  subsidies_financing: "💰 Субсидии и льготное финансирование",
-  logistics_ved: "🚚 Логистика и ВЭД",
-  international_payments: "💸 Международные платежи",
-  analytics_tnved: "🔎 Аналитика и ТН ВЭД",
-  quick_audit_inn: "🧾 Проверка по ИНН",
-  club_partnership: "🤝 Клуб и партнёрство",
-  unknown: "unknown",
+  subsidies_financing: "Субсидии и льготное финансирование",
+  logistics_ved: "Логистика и ВЭД",
+  international_payments: "Международные платежи",
+  analytics_tnved: "Аналитика и ТН ВЭД",
+  quick_audit_inn: "Проверка по ИНН (quick audit)",
+  club_partnership: "Клуб экспортёров и партнёрство",
+  unknown: "Неизвестно",
 };
 
 const FUNNEL_STEP_LABELS = {
@@ -51,6 +51,55 @@ const CONV_LABELS = {
   meeting_to_lead: "Окно → лид",
   entry_to_lead: "Вход → лид",
 };
+
+const EVENT_LABELS = {
+  entry_service: "Выбор услуги",
+  engagement_start: "Старт сценария",
+  engagement_complete: "Получили результат",
+  cta_lead_start: "Нажали «Оставить заявку»",
+  contact_submitted: "Оставили контакт",
+  meeting_window_selected: "Выбрали окно созвона",
+  meeting_window_submitted: "Ввели окно созвона",
+  lead_created: "Лид создан (Bitrix)",
+  subsidy_calc_complete: "Калькулятор субсидий завершён",
+  finance_calc_complete: "Калькулятор финансирования завершён",
+  logistics_quote_complete: "Запрос логистики завершён",
+  payments_precheck_complete: "Предчек платежа завершён",
+  analytics_report_complete: "Запрос аналитики завершён",
+  audit_quick_complete: "Быстрый аудит завершён",
+  club_apply_complete: "Заявка в клуб отправлена",
+};
+
+function safeJsonParse(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function formatEventMessage(messageText) {
+  const raw = String(messageText || "");
+  const body = raw.startsWith("event:") ? raw.slice("event:".length) : raw;
+  const payload = safeJsonParse(body);
+  if (!payload || typeof payload !== "object") return null;
+
+  const event = payload.event ? String(payload.event) : "";
+  const serviceKey = payload.service ? String(payload.service) : "";
+  const meta = payload.meta && typeof payload.meta === "object" ? payload.meta : null;
+
+  const eventLabel = EVENT_LABELS[event] || event || "Событие";
+  const serviceLabel = serviceKey ? SERVICE_LABELS[serviceKey] || serviceKey : "";
+
+  const metaParts = [];
+  if (serviceLabel) metaParts.push(`Услуга: ${serviceLabel}`);
+  if (meta && meta.value) metaParts.push(`Значение: ${String(meta.value)}`);
+
+  const metaHtml = metaParts.length
+    ? `<div class="event-meta">${escapeHtml(metaParts.join(" · "))}</div>`
+    : "";
+  return `<div class="event-title">${escapeHtml(eventLabel)}</div>${metaHtml}`;
+}
 
 let __charts = {};
 
@@ -147,7 +196,7 @@ async function loadStats() {
               .map(
                 ([k, v]) => `
                   <tr>
-                    <td class="text-secondary">${escapeHtml(k)}</td>
+                    <td class="text-secondary">${escapeHtml(SERVICE_LABELS[k] || k)}</td>
                     <td class="text-end fw-bold">${escapeHtml(String(v))}</td>
                   </tr>
                 `
@@ -618,13 +667,17 @@ async function openConversation(userId) {
               : role === "event"
                 ? "Событие"
                 : "Пользователь";
+      const rawText = String(m.message_text || "");
+      const eventHtml =
+        role === "event" || rawText.startsWith("event:") ? formatEventMessage(rawText) : null;
+      const bodyHtml = eventHtml ? eventHtml : escapeHtml(rawText);
       return `
         <div class="msg ${role}">
           <div class="head">
             <div>${escapeHtml(who)}</div>
             <div>${fmtDate(m.created_at)}</div>
           </div>
-          <div>${escapeHtml(m.message_text)}</div>
+          <div>${bodyHtml}</div>
         </div>
       `;
     })
