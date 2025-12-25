@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import AsyncGenerator, Optional
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -10,10 +11,8 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.pool import NullPool
-from src.logger import logger
-
 from src.config import settings
-from sqlalchemy import text
+from src.logger import logger
 
 Base = declarative_base()
 
@@ -23,13 +22,17 @@ _session_factory: Optional[async_sessionmaker[AsyncSession]] = None
 
 def get_engine() -> AsyncEngine:
     if _engine is None:
-        raise RuntimeError("Database engine is not initialized. Call init_db() first.")
+        raise RuntimeError(
+            "Database engine is not initialized. Call init_db() first."
+        )
     return _engine
 
 
 def get_session_factory() -> async_sessionmaker[AsyncSession]:
     if _session_factory is None:
-        raise RuntimeError("DB session factory not initialized. Call init_db() first.")
+        raise RuntimeError(
+            "DB session factory not initialized. Call init_db() first."
+        )
     return _session_factory
 
 
@@ -65,16 +68,25 @@ async def init_db() -> None:
         await conn.run_sync(Base.metadata.create_all)
         # Hotfix: bot_id for bot_heartbeat must be bigint (Telegram IDs can exceed int32)
         try:
-            await conn.execute(text('ALTER TABLE bot_heartbeat ALTER COLUMN bot_id TYPE BIGINT'))
+            await conn.execute(
+                text(
+                    "ALTER TABLE bot_heartbeat ALTER COLUMN bot_id TYPE BIGINT"
+                )
+            )
         except Exception:
             # table may not exist yet or already correct; ignore
             pass
 
-    logger.info("database_initialized", host=settings.postgres_host, db=settings.postgres_db)
+    logger.info(
+        "database_initialized",
+        host=settings.postgres_host,
+        db=settings.postgres_db,
+    )
 
     # Seed staff (admins) from env for first run
     try:
         from src.services.staff_service import bootstrap_staff
+
         async with _session_factory() as session:  # type: ignore[misc]
             await bootstrap_staff(session)
     except Exception as e:
@@ -90,7 +102,9 @@ async def close_db() -> None:
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     if _session_factory is None:
-        raise RuntimeError("DB session factory not initialized. Call init_db() first.")
+        raise RuntimeError(
+            "DB session factory not initialized. Call init_db() first."
+        )
 
     async with _session_factory() as session:
         try:
@@ -100,5 +114,3 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
             raise
         finally:
             await session.close()
-
-

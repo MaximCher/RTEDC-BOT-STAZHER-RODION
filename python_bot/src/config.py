@@ -30,7 +30,9 @@ class Settings(BaseSettings):
     # OpenAI
     openai_api_key: str = Field("", alias="OPENAI_API_KEY")
     openai_model: str = Field("gpt-4o-mini", alias="OPENAI_MODEL")
-    embedding_model: str = Field("text-embedding-3-small", alias="EMBEDDING_MODEL")
+    embedding_model: str = Field(
+        "text-embedding-3-small", alias="EMBEDDING_MODEL"
+    )
 
     # Bitrix
     bitrix24_webhook_url: str = Field("", alias="BITRIX24_WEBHOOK_URL")
@@ -41,24 +43,36 @@ class Settings(BaseSettings):
         default=None, alias="BITRIX_DEFAULT_CATEGORY_ID"
     )
     bitrix_uf_tg_id: str = Field("UF_CRM_TG_ID", alias="BITRIX_UF_TG_ID")
-    bitrix_uf_tg_username: str = Field("UF_CRM_TG_USERNAME", alias="BITRIX_UF_TG_USERNAME")
-    bitrix_uf_service_key: str = Field("UF_CRM_SRV_SERVICE", alias="BITRIX_UF_SERVICE_KEY")
+    bitrix_uf_tg_username: str = Field(
+        "UF_CRM_TG_USERNAME", alias="BITRIX_UF_TG_USERNAME"
+    )
+    bitrix_uf_service_key: str = Field(
+        "UF_CRM_SRV_SERVICE", alias="BITRIX_UF_SERVICE_KEY"
+    )
 
     # App
     log_level: str = Field("INFO", alias="LOG_LEVEL")
     debug_mode: bool = Field(False, alias="DEBUG_MODE")
 
     # Admin panel
-    admin_password: str = Field("ChangeThisPassword123!", alias="ADMIN_PASSWORD")
+    admin_password: str = Field(
+        "ChangeThisPassword123!", alias="ADMIN_PASSWORD"
+    )
     web_session_secret: str = Field(
         "ChangeThisSecretKey123!", alias="WEB_SESSION_SECRET"
     )  # used to sign admin sessions
     web_host: str = Field("0.0.0.0", alias="WEB_HOST")
     web_port: int = Field(8000, alias="WEB_PORT")
-    webapp_public_url: str = Field("https://example.com/admin", alias="WEBAPP_PUBLIC_URL")
+    webapp_public_url: str = Field(
+        "https://example.com/admin", alias="WEBAPP_PUBLIC_URL"
+    )
     admin_user_ids: str = Field("", alias="ADMIN_USER_IDS")
 
-    @field_validator("bitrix_responsible_default_id", "bitrix_default_category_id", mode="before")
+    @field_validator(
+        "bitrix_responsible_default_id",
+        "bitrix_default_category_id",
+        mode="before",
+    )
     @classmethod
     def _empty_str_to_none(cls, v: Any) -> Any:
         if v is None:
@@ -293,5 +307,3 @@ MESSAGES: Dict[str, str] = {
         "Я всё равно могу передать вводные менеджеру SRVT — он подберёт программу и рассчитает точно."
     ),
 }
-
-
