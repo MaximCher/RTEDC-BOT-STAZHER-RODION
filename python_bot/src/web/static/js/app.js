@@ -169,9 +169,36 @@ async function loadWebappUrl() {
     const data = await api("/api/webapp-url");
     const url = String(data?.url || "").trim();
     if (!url) return;
-    a.textContent = url;
+    // Keep full URL for opening/copying, but show short host for readability.
+    window.__currentWebappUrl = url;
+    try {
+      const u = new URL(url);
+      a.textContent = u.host;
+    } catch {
+      a.textContent = url;
+    }
     a.href = url;
   } catch {
+    // ignore
+  }
+}
+
+function copyCurrentWebappUrl() {
+  const url = window.__currentWebappUrl || (qs("current-webapp-url")?.href || "");
+  if (!url || url === "#") return;
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(url).catch(() => {});
+    return;
+  }
+  // Fallback
+  try {
+    const tmp = document.createElement("input");
+    tmp.value = url;
+    document.body.appendChild(tmp);
+    tmp.select();
+    document.execCommand("copy");
+    document.body.removeChild(tmp);
+  } catch (e) {
     // ignore
   }
 }

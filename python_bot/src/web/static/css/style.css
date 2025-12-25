@@ -12,6 +12,10 @@ body {
 }
 
 .navbar-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
   white-space: normal !important;
   min-width: 0;
   max-width: 100%;
@@ -24,12 +28,27 @@ body {
   word-break: break-word;
 }
 
+.miniapp-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+}
+
 @media (max-width: 420px) {
   .navbar .container-xl {
     flex-direction: column;
     align-items: stretch;
   }
   .navbar-brand {
+    width: 100%;
+  }
+  /* On very narrow screens the URL text looks ugly; keep only the copy button */
+  .miniapp-row a {
+    display: none;
+  }
+  .miniapp-row .btn {
     width: 100%;
   }
   .navbar-nav {

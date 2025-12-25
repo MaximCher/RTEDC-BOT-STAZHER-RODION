@@ -49,9 +49,24 @@
             <div class="text-secondary small">
               Фильтр по датам влияет на список пользователей и статистику.
             </div>
-            <div class="text-secondary small">
-              Mini App URL:
-              <a id="current-webapp-url" href="#" target="_blank" rel="noreferrer">—</a>
+            <div class="miniapp-row">
+              <div class="text-secondary small">Mini App</div>
+              <a
+                id="current-webapp-url"
+                class="small text-truncate"
+                style="max-width: 360px"
+                href="#"
+                target="_blank"
+                rel="noreferrer"
+                >—</a
+              >
+              <button
+                class="btn btn-sm btn-outline-secondary"
+                type="button"
+                onclick="copyCurrentWebappUrl()"
+              >
+                Копировать ссылку
+              </button>
             </div>
           </div>
           <div class="navbar-nav flex-row order-md-last">
