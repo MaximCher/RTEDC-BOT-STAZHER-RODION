@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uvicorn
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
@@ -33,6 +33,11 @@ def create_app() -> FastAPI:
     @app.get("/", response_class=HTMLResponse)
     async def index(request: Request) -> HTMLResponse:
         return templates.TemplateResponse("index.html", {"request": request})
+
+    @app.get("/favicon.ico")
+    async def favicon() -> Response:
+        # Avoid noisy 404s in browsers; we don't ship a favicon yet.
+        return Response(status_code=204)
 
     # Cookie-signed sessions for admin login (no in-memory session storage).
     app.add_middleware(
