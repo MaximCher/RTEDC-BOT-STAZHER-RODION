@@ -87,7 +87,7 @@ async def init_db() -> None:
         try:
             await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         except Exception:
-            # Extension may be disabled or user may not have permission; ignore.
+            # Extension may be disabled or user may not have permission.
             pass
         # tables
         await conn.run_sync(Base.metadata.create_all)
