@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
@@ -32,7 +33,12 @@ def create_app() -> FastAPI:
 
     @app.get("/", response_class=HTMLResponse)
     async def index(request: Request) -> HTMLResponse:
-        return templates.TemplateResponse("index.html", {"request": request})
+        # Telegram WebView can aggressively cache /static assets.
+        # Use a simple cache-buster to always load latest JS/CSS.
+        return templates.TemplateResponse(
+            "index.html",
+            {"request": request, "static_version": int(time.time())},
+        )
 
     @app.get("/favicon.ico")
     async def favicon() -> Response:
@@ -74,6 +80,13 @@ def create_app() -> FastAPI:
         }
 
     register_api(app)
+
+    @app.middleware("http")
+    async def static_no_cache_middleware(request: Request, call_next):
+        resp = await call_next(request)
+        if request.url.path.startswith("/static/"):
+            resp.headers["Cache-Control"] = "no-store, max-age=0"
+        return resp
 
     @app.middleware("http")
     async def rate_limit_middleware(request: Request, call_next):

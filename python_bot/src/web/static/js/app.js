@@ -404,6 +404,8 @@ async function loadFunnel() {
             borderWidth: 1,
             backgroundColor: "rgba(37, 99, 235, 0.25)",
             borderColor: "rgba(37, 99, 235, 1)",
+            borderRadius: 8,
+            borderSkipped: false,
           },
         ],
       },
@@ -416,7 +418,11 @@ async function loadFunnel() {
           tooltip: { enabled: true },
         },
         scales: {
-          x: { beginAtZero: true, ticks: { precision: 0 } },
+          x: {
+            beginAtZero: true,
+            ticks: { precision: 0 },
+            grid: { color: "rgba(148, 163, 184, 0.25)" },
+          },
           y: { ticks: { autoSkip: false } },
         },
       },
@@ -484,6 +490,13 @@ async function loadFunnel() {
 
   const ctxSvc = qs("chart-service-lead")?.getContext("2d");
   if (ctxSvc) {
+    const maxPct = Math.max(0, ...svcVals);
+    const maxX = Math.max(5, Math.ceil(maxPct / 10) * 10);
+    const bg = svcVals.map((v) => {
+      // greener for higher conversion
+      const a = Math.min(0.55, Math.max(0.18, v / 100 + 0.18));
+      return `rgba(34, 197, 94, ${a})`;
+    });
     __charts.serviceLead = new Chart(ctxSvc, {
       type: "bar",
       data: {
@@ -493,18 +506,24 @@ async function loadFunnel() {
             label: "Вход → лид, %",
             data: svcVals,
             borderWidth: 1,
-            backgroundColor: "rgba(34, 197, 94, 0.25)",
+            backgroundColor: bg,
             borderColor: "rgba(34, 197, 94, 1)",
+            borderRadius: 8,
+            borderSkipped: false,
           },
         ],
       },
       options: {
+        indexAxis: "y",
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
           legend: { display: false },
           tooltip: {
             callbacks: {
+              label: function (ctx) {
+                return `${Number(ctx.parsed.x || 0).toFixed(2)}%`;
+              },
               afterLabel: function (ctx) {
                 const idx = ctx.dataIndex;
                 const row = svcRows[idx];
@@ -514,7 +533,13 @@ async function loadFunnel() {
           },
         },
         scales: {
-          y: { beginAtZero: true, max: 100, ticks: { callback: (v) => `${v}%` } },
+          x: {
+            beginAtZero: true,
+            max: maxX,
+            ticks: { callback: (v) => `${v}%` },
+            grid: { color: "rgba(148, 163, 184, 0.25)" },
+          },
+          y: { ticks: { autoSkip: false } },
         },
       },
     });
