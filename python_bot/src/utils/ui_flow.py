@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import html
 from typing import Optional
 
@@ -73,7 +74,8 @@ async def ui_upsert(
             if old_id <= 0 or old_id == new_id:
                 continue
             try:
-                await bot.delete_message(chat_id=chat_id, message_id=old_id)
+                # Fire-and-forget: deletion is non-critical and can be slow.
+                asyncio.create_task(bot.delete_message(chat_id=chat_id, message_id=old_id))
             except Exception:
                 pass
         return

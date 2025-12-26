@@ -42,6 +42,11 @@ class LeadForm(StatesGroup):
 
 @router.callback_query(F.data == "lead:back")
 async def lead_back(callback: CallbackQuery, state: FSMContext) -> None:
+    # UX: acknowledge click immediately to stop Telegram "loading" spinner
+    try:
+        await callback.answer()
+    except Exception:
+        pass
     current = await state.get_state()
     if current == LeadForm.waiting_for_contact_data.state:
         data = await state.get_data()
@@ -58,11 +63,9 @@ async def lead_back(callback: CallbackQuery, state: FSMContext) -> None:
             parse_mode=pm,
             keep_at_bottom=True,
         )
-        await callback.answer()
         return
 
     if current != LeadForm.waiting_for_meeting_window.state:
-        await callback.answer()
         return
 
     data = await state.get_data()
@@ -73,7 +76,6 @@ async def lead_back(callback: CallbackQuery, state: FSMContext) -> None:
             await callback.message.edit_text(msg("welcome"), reply_markup=services_keyboard())
         except Exception:
             await callback.message.answer(msg("welcome"), reply_markup=services_keyboard())
-        await callback.answer()
         return
 
     # Go back to contact step (allow user to fix name/phone)
@@ -89,11 +91,15 @@ async def lead_back(callback: CallbackQuery, state: FSMContext) -> None:
         reply_markup=flow_nav_keyboard("lead:back"),
         keep_at_bottom=True,
     )
-    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("lead:start:"))
 async def lead_start(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    # UX: acknowledge click immediately to stop Telegram "loading" spinner
+    try:
+        await callback.answer()
+    except Exception:
+        pass
     service_key = (callback.data or "").split("lead:start:", 1)[-1].strip()
     await state.set_state(LeadForm.waiting_for_contact_data)
     await state.update_data(service_key=service_key)
@@ -119,7 +125,6 @@ async def lead_start(callback: CallbackQuery, state: FSMContext, session: AsyncS
         reply_markup=flow_nav_keyboard("lead:back"),
         keep_at_bottom=True,
     )
-    await callback.answer()
 
 
 @router.message(LeadForm.waiting_for_contact_data)

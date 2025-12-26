@@ -35,9 +35,13 @@ class ServiceQuestionnaire(StatesGroup):
 
 @router.callback_query(F.data == "q:back")
 async def questionnaire_back(callback: CallbackQuery, state: FSMContext) -> None:
+    # UX: acknowledge click immediately to stop Telegram "loading" spinner
+    try:
+        await callback.answer()
+    except Exception:
+        pass
     current = await state.get_state()
     if current != ServiceQuestionnaire.waiting_for_answer.state:
-        await callback.answer()
         return
 
     data = await state.get_data()
@@ -48,7 +52,6 @@ async def questionnaire_back(callback: CallbackQuery, state: FSMContext) -> None
             await callback.message.edit_text(msg("choose_service"), reply_markup=services_keyboard())
         except Exception:
             await callback.message.answer(msg("choose_service"), reply_markup=services_keyboard())
-        await callback.answer()
         return
 
     flow = SERVICE_FLOWS[service_key]
@@ -69,7 +72,6 @@ async def questionnaire_back(callback: CallbackQuery, state: FSMContext) -> None
             parse_mode=pm,
             keep_at_bottom=True,
         )
-        await callback.answer()
         return
 
     new_index = index - 1
@@ -91,7 +93,6 @@ async def questionnaire_back(callback: CallbackQuery, state: FSMContext) -> None
         reply_markup=flow_nav_keyboard("q:back"),
         keep_at_bottom=True,
     )
-    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("service:questionnaire:"))
@@ -105,6 +106,11 @@ async def handle_service_questionnaire_start(
     if not flow:
         await callback.answer(msg("unknown_service"), show_alert=True)
         return
+    # UX: acknowledge click immediately to stop Telegram "loading" spinner
+    try:
+        await callback.answer()
+    except Exception:
+        pass
 
     user_id = callback.from_user.id
     await UserMemory.update_user_data(session, user_id, selected_service=service_key)
@@ -148,7 +154,6 @@ async def handle_service_questionnaire_start(
         reply_markup=flow_nav_keyboard("q:back"),
         keep_at_bottom=True,
     )
-    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("service:"))
@@ -162,6 +167,11 @@ async def handle_service_selection(
     if not flow:
         await callback.answer(msg("unknown_service"), show_alert=True)
         return
+    # UX: acknowledge click immediately to stop Telegram "loading" spinner
+    try:
+        await callback.answer()
+    except Exception:
+        pass
 
     user_id = callback.from_user.id
 
@@ -189,7 +199,6 @@ async def handle_service_selection(
             await callback.message.edit_text(flow["description"], reply_markup=subsidies_entry_keyboard())
         except Exception:
             await callback.message.answer(flow["description"], reply_markup=subsidies_entry_keyboard())
-        await callback.answer()
         return
 
     if service_key == "international_payments":
@@ -198,7 +207,6 @@ async def handle_service_selection(
             await callback.message.edit_text(flow["description"], reply_markup=payments_entry_keyboard())
         except Exception:
             await callback.message.answer(flow["description"], reply_markup=payments_entry_keyboard())
-        await callback.answer()
         return
 
     if service_key == "logistics_ved":
@@ -207,7 +215,6 @@ async def handle_service_selection(
             await callback.message.edit_text(flow["description"], reply_markup=logistics_entry_keyboard())
         except Exception:
             await callback.message.answer(flow["description"], reply_markup=logistics_entry_keyboard())
-        await callback.answer()
         return
 
     if service_key == "analytics_tnved":
@@ -216,7 +223,6 @@ async def handle_service_selection(
             await callback.message.edit_text(flow["description"], reply_markup=analytics_entry_keyboard())
         except Exception:
             await callback.message.answer(flow["description"], reply_markup=analytics_entry_keyboard())
-        await callback.answer()
         return
 
     if service_key == "club_partnership":
@@ -225,7 +231,6 @@ async def handle_service_selection(
             await callback.message.edit_text(flow["description"], reply_markup=club_entry_keyboard())
         except Exception:
             await callback.message.answer(flow["description"], reply_markup=club_entry_keyboard())
-        await callback.answer()
         return
 
     await state.set_state(ServiceQuestionnaire.waiting_for_answer)
@@ -252,7 +257,6 @@ async def handle_service_selection(
         reply_markup=flow_nav_keyboard("q:back"),
         keep_at_bottom=True,
     )
-    await callback.answer()
 
 
 @router.message(ServiceQuestionnaire.waiting_for_answer)
