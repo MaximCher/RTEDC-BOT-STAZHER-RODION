@@ -108,7 +108,7 @@ async def cmd_start_deeplink(
 async def back_to_menu(callback: CallbackQuery, state: FSMContext) -> None:
     # UX: acknowledge click immediately to stop Telegram "loading" spinner
     try:
-        await callback.answer()
+        await callback.answer("Открываю меню…", cache_time=1)
     except Exception:
         pass
     await state.clear()
@@ -136,7 +136,7 @@ async def open_menu_new_message(callback: CallbackQuery) -> None:
     """Open menu without editing/deleting the current message (keeps important info in history)."""
     # UX: acknowledge click immediately to stop Telegram "loading" spinner
     try:
-        await callback.answer()
+        await callback.answer("Открываю меню…", cache_time=1)
     except Exception:
         pass
     await callback.message.answer(msg("welcome"), reply_markup=services_keyboard())
@@ -147,7 +147,7 @@ async def open_entry_new_message(callback: CallbackQuery) -> None:
     """Open a service entry screen without editing/deleting the current message."""
     # UX: acknowledge click immediately to stop Telegram "loading" spinner
     try:
-        await callback.answer()
+        await callback.answer("Открываю…", cache_time=1)
     except Exception:
         pass
     service_key = (callback.data or "").split("entry:new:", 1)[-1].strip()

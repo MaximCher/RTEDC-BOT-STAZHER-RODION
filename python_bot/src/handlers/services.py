@@ -108,7 +108,7 @@ async def handle_service_questionnaire_start(
         return
     # UX: acknowledge click immediately to stop Telegram "loading" spinner
     try:
-        await callback.answer()
+        await callback.answer("Открываю…", cache_time=1)
     except Exception:
         pass
 
@@ -169,7 +169,7 @@ async def handle_service_selection(
         return
     # UX: acknowledge click immediately to stop Telegram "loading" spinner
     try:
-        await callback.answer()
+        await callback.answer("Открываю…", cache_time=1)
     except Exception:
         pass
 

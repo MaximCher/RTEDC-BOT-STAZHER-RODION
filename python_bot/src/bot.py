@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.database import get_session_factory
 from src.handlers import get_routers
 from src.logger import logger
+from src.middlewares.callback_serial import CallbackSerialMiddleware
 from src.services.heartbeat_service import heartbeat_loop
 from src.services.webapp_menu_service import webapp_menu_button_sync_loop
 
@@ -36,6 +37,8 @@ class DbSessionMiddleware(BaseMiddleware):
 
 def create_dispatcher() -> Dispatcher:
     dp = Dispatcher()
+    # Must be first: prevent concurrent callback_query races (double clicks).
+    dp.update.middleware(CallbackSerialMiddleware())
     dp.update.middleware(DbSessionMiddleware())
     for r in get_routers():
         dp.include_router(r)
