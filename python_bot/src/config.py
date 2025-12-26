@@ -264,12 +264,7 @@ MESSAGES: Dict[str, str] = {
         "Помогаю по субсидиям, логистике и ВЭД, международным платежам и аналитике.\n\n"
         "Выберите направление ниже 👇"
     ),
-    # NOTE: Telegram renders inline keyboard width based on the message bubble width.
-    # Keep this text "wide" so menu buttons don't visually shrink when user returns to menu.
-    "choose_service": (
-        "Выберите направление ниже 👇\n\n"
-        "Субсидии • Логистика и ВЭД • Международные платежи • Аналитика • Клуб"
-    ),
+    "choose_service": "Пожалуйста, выберите направление:",
     "back_to_menu": "Вы вернулись в меню. Выберите направление ниже 👇",
     "unknown_service": "Не удалось определить направление. Попробуйте ещё раз через меню.",
     "questionnaire_done": "Анкета завершена. Спасибо! Если хотите — передам кейс эксперту, нажмите кнопку ниже.",

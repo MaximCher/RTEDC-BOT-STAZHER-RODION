@@ -34,6 +34,6 @@ async def fallback_to_menu(message: Message, state: FSMContext) -> None:
         return
 
     await state.clear()
-    await message.answer(msg("choose_service"), reply_markup=services_keyboard())
+    await message.answer(msg("welcome"), reply_markup=services_keyboard())
 
 

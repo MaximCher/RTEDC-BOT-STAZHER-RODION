@@ -109,7 +109,7 @@ async def back_to_menu(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     # UX: avoid chat spam. Prefer re-rendering menu in the same message.
     try:
-        await callback.message.edit_text(msg("choose_service"), reply_markup=services_keyboard())
+        await callback.message.edit_text(msg("welcome"), reply_markup=services_keyboard())
         await callback.answer()
         return
     except Exception:
@@ -122,7 +122,7 @@ async def back_to_menu(callback: CallbackQuery, state: FSMContext) -> None:
     except Exception:
         pass
     try:
-        await callback.message.bot.send_message(chat_id, msg("choose_service"), reply_markup=services_keyboard())
+        await callback.message.bot.send_message(chat_id, msg("welcome"), reply_markup=services_keyboard())
     except Exception:
         pass
     await callback.answer()
@@ -131,7 +131,7 @@ async def back_to_menu(callback: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(F.data == "menu:new")
 async def open_menu_new_message(callback: CallbackQuery) -> None:
     """Open menu without editing/deleting the current message (keeps important info in history)."""
-    await callback.message.answer(msg("choose_service"), reply_markup=services_keyboard())
+    await callback.message.answer(msg("welcome"), reply_markup=services_keyboard())
     await callback.answer()
 
 

@@ -70,9 +70,9 @@ async def lead_back(callback: CallbackQuery, state: FSMContext) -> None:
     if not isinstance(service_key, str):
         await state.clear()
         try:
-            await callback.message.edit_text(msg("choose_service"), reply_markup=services_keyboard())
+            await callback.message.edit_text(msg("welcome"), reply_markup=services_keyboard())
         except Exception:
-            await callback.message.answer(msg("choose_service"), reply_markup=services_keyboard())
+            await callback.message.answer(msg("welcome"), reply_markup=services_keyboard())
         await callback.answer()
         return
 
