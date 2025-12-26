@@ -10,7 +10,6 @@ from src.utils.keyboards import (
     club_entry_keyboard,
     logistics_entry_keyboard,
     payments_entry_keyboard,
-    quick_audit_entry_keyboard,
     services_keyboard,
     subsidies_entry_keyboard,
 )
@@ -33,8 +32,6 @@ def entry_screen_for_service(service_key: str) -> Tuple[str, InlineKeyboardMarku
         return text, logistics_entry_keyboard(), None
     if service_key == "analytics_tnved":
         return text, analytics_entry_keyboard(), None
-    if service_key == "quick_audit_inn":
-        return text, quick_audit_entry_keyboard(), None
     if service_key == "club_partnership":
         return text, club_entry_keyboard(), None
 

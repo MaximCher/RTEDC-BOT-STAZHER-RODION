@@ -19,11 +19,14 @@ def flow_nav_keyboard(back_callback_data: str | None = None) -> InlineKeyboardMa
     If back_callback_data is not provided, "Назад" will behave as "В меню".
     """
     back_cb = back_callback_data or "menu:root"
-    row = [
-        InlineKeyboardButton(text="⬅️ Назад", callback_data=back_cb),
-        InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:root"),
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=[row])
+    # UX: keep navigation buttons full-width and stable across screens
+    # (1 button per row prevents "jumping" between wide and narrow layouts).
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data=back_cb)],
+            [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:root")],
+        ]
+    )
 
 
 def lead_actions_keyboard(service_key: str) -> InlineKeyboardMarkup:
@@ -45,8 +48,8 @@ def lead_actions_keyboard(service_key: str) -> InlineKeyboardMarkup:
             first_row,
             [
                 InlineKeyboardButton(text="⬅️ Назад", callback_data=f"entry:new:{service_key}"),
-                InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:new"),
             ],
+            [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:new")],
         ]
     )
 
@@ -63,143 +66,137 @@ def subsidy_chat_keyboard(service_key: str) -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(text="⬅️ Назад", callback_data=f"entry:new:{service_key}"),
-                InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:new"),
             ],
+            [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:new")],
         ]
     )
 
 
 def subsidies_entry_keyboard() -> InlineKeyboardMarkup:
     """Entry keyboard for SRVT subsidies/financing direction (SRVT-style CTAs)."""
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="📊 Рассчитать объём субсидии (2 мин)",
-                    callback_data="subsidy:calc:start:subsidies_financing",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="💳 Рассчитать финансирование/рефинанс (2 мин)",
-                    callback_data="finance:calc:start:subsidies_financing",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🔎 Вопрос по субсидиям",
-                    callback_data="subsidy:chat:start:subsidies_financing",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="📝 Заполнить анкету",
-                    callback_data="service:questionnaire:subsidies_financing",
-                )
-            ],
-            flow_nav_keyboard().inline_keyboard[0],
-        ]
-    )
+    rows = [
+        [
+            InlineKeyboardButton(
+                text="📊 Рассчитать объём субсидии (2 мин)",
+                callback_data="subsidy:calc:start:subsidies_financing",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="💳 Рассчитать финансирование/рефинанс (2 мин)",
+                callback_data="finance:calc:start:subsidies_financing",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="🔎 Вопрос по субсидиям",
+                callback_data="subsidy:chat:start:subsidies_financing",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="📝 Заполнить анкету",
+                callback_data="service:questionnaire:subsidies_financing",
+            )
+        ],
+    ]
+    rows += flow_nav_keyboard().inline_keyboard
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def payments_entry_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="💸 Оценить международный платеж (1 мин)",
-                    callback_data="payments:precheck:start:international_payments",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="📝 Заполнить анкету",
-                    callback_data="service:questionnaire:international_payments",
-                )
-            ],
-            flow_nav_keyboard().inline_keyboard[0],
-        ]
-    )
+    rows = [
+        [
+            InlineKeyboardButton(
+                text="💸 Оценить международный платеж (1 мин)",
+                callback_data="payments:precheck:start:international_payments",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="📝 Заполнить анкету",
+                callback_data="service:questionnaire:international_payments",
+            )
+        ],
+    ]
+    rows += flow_nav_keyboard().inline_keyboard
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def logistics_entry_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="🚚 Получить расчёт логистики (1 мин)",
-                    callback_data="logistics:quote:start:logistics_ved",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="📝 Заполнить анкету",
-                    callback_data="service:questionnaire:logistics_ved",
-                )
-            ],
-            flow_nav_keyboard().inline_keyboard[0],
-        ]
-    )
+    rows = [
+        [
+            InlineKeyboardButton(
+                text="🚚 Получить расчёт логистики (1 мин)",
+                callback_data="logistics:quote:start:logistics_ved",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="📝 Заполнить анкету",
+                callback_data="service:questionnaire:logistics_ved",
+            )
+        ],
+    ]
+    rows += flow_nav_keyboard().inline_keyboard
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def analytics_entry_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="📈 Заказать аналитический отчёт (1 мин)",
-                    callback_data="analytics:report:start:analytics_tnved",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="📝 Заполнить анкету",
-                    callback_data="service:questionnaire:analytics_tnved",
-                )
-            ],
-            flow_nav_keyboard().inline_keyboard[0],
-        ]
-    )
+    rows = [
+        [
+            InlineKeyboardButton(
+                text="📈 Заказать аналитический отчёт (1 мин)",
+                callback_data="analytics:report:start:analytics_tnved",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="📝 Заполнить анкету",
+                callback_data="service:questionnaire:analytics_tnved",
+            )
+        ],
+    ]
+    rows += flow_nav_keyboard().inline_keyboard
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def quick_audit_entry_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="🧾 Быстрый аудит по ИНН (1 мин)",
-                    callback_data="audit:quick:start:quick_audit_inn",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="📝 Заполнить анкету",
-                    callback_data="service:questionnaire:quick_audit_inn",
-                )
-            ],
-            flow_nav_keyboard().inline_keyboard[0],
-        ]
-    )
+    rows = [
+        [
+            InlineKeyboardButton(
+                text="🧾 Быстрый аудит по ИНН (1 мин)",
+                callback_data="audit:quick:start:quick_audit_inn",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="📝 Заполнить анкету",
+                callback_data="service:questionnaire:quick_audit_inn",
+            )
+        ],
+    ]
+    rows += flow_nav_keyboard().inline_keyboard
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def club_entry_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="🤝 Стать партнёром/агентом (1 мин)",
-                    callback_data="club:apply:start:club_partnership",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="📝 Заполнить анкету",
-                    callback_data="service:questionnaire:club_partnership",
-                )
-            ],
-            flow_nav_keyboard().inline_keyboard[0],
-        ]
-    )
+    rows = [
+        [
+            InlineKeyboardButton(
+                text="🤝 Стать партнёром/агентом (1 мин)",
+                callback_data="club:apply:start:club_partnership",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="📝 Заполнить анкету",
+                callback_data="service:questionnaire:club_partnership",
+            )
+        ],
+    ]
+    rows += flow_nav_keyboard().inline_keyboard
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def meeting_window_keyboard(include_back: bool = False) -> InlineKeyboardMarkup:
@@ -220,11 +217,11 @@ def meeting_window_keyboard(include_back: bool = False) -> InlineKeyboardMarkup:
             (
                 [
                     InlineKeyboardButton(text="⬅️ Назад", callback_data="lead:back"),
-                    InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:root"),
                 ]
                 if include_back
-                else [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:root")]
+                else []
             ),
+            [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:root")],
         ]
     )
 

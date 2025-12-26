@@ -16,7 +16,6 @@ from src.utils.keyboards import (
     lead_actions_keyboard,
     logistics_entry_keyboard,
     payments_entry_keyboard,
-    quick_audit_entry_keyboard,
     services_keyboard,
     subsidies_entry_keyboard,
 )
@@ -217,15 +216,6 @@ async def handle_service_selection(
             await callback.message.edit_text(flow["description"], reply_markup=analytics_entry_keyboard())
         except Exception:
             await callback.message.answer(flow["description"], reply_markup=analytics_entry_keyboard())
-        await callback.answer()
-        return
-
-    if service_key == "quick_audit_inn":
-        await state.clear()
-        try:
-            await callback.message.edit_text(flow["description"], reply_markup=quick_audit_entry_keyboard())
-        except Exception:
-            await callback.message.answer(flow["description"], reply_markup=quick_audit_entry_keyboard())
         await callback.answer()
         return
 

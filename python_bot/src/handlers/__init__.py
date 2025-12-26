@@ -2,6 +2,7 @@ from aiogram import Router
 
 from src.handlers.analytics import router as analytics_router
 from src.handlers.club import router as club_router
+from src.handlers.fallback import router as fallback_router
 from src.handlers.financing import router as financing_router
 from src.handlers.logistics import router as logistics_router
 from src.handlers.lead import router as lead_router
@@ -26,6 +27,8 @@ def get_routers() -> list[Router]:
         analytics_router,
         quick_audit_router,
         club_router,
+        # Must be the last router (lowest priority).
+        fallback_router,
     ]
 
 

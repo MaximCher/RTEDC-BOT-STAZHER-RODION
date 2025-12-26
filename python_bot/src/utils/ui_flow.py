@@ -60,8 +60,18 @@ async def ui_upsert(
         new_id = int(sent.message_id)
         await state.update_data(**{UI_MESSAGE_ID_KEY: new_id, UI_MODE_KEY: "bottom"})
         # Best-effort cleanup
-        old_id = msg_id if isinstance(msg_id, int) and msg_id > 0 else prefer_message_id
-        if isinstance(old_id, int) and old_id > 0 and old_id != new_id:
+        # IMPORTANT: when we switch screens via callback_query, `prefer_message_id`
+        # can point to the *entry screen* message, while `msg_id` points to a previous
+        # transient UI message tracked in FSM. To prevent "double UI panels", try
+        # deleting BOTH candidates if they are different.
+        candidates: list[int] = []
+        if isinstance(msg_id, int) and msg_id > 0:
+            candidates.append(int(msg_id))
+        if isinstance(prefer_message_id, int) and prefer_message_id > 0:
+            candidates.append(int(prefer_message_id))
+        for old_id in dict.fromkeys(candidates):  # stable unique
+            if old_id <= 0 or old_id == new_id:
+                continue
             try:
                 await bot.delete_message(chat_id=chat_id, message_id=old_id)
             except Exception:
