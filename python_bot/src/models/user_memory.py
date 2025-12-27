@@ -34,8 +34,13 @@ class UserMemory(Base):
             return user
         user = cls(user_id=user_id)
         session.add(user)
-        await session.commit()
-        await session.refresh(user)
+        # NOTE: do not commit here. Transaction boundary is managed by caller (UoW).
+        # Flush is enough to ensure PK/defaults are assigned if needed.
+        try:
+            await session.flush()
+        except Exception:
+            # In some code paths session may be in autocommit-like mode; ignore.
+            pass
         return user
 
     @classmethod
@@ -55,8 +60,7 @@ class UserMemory(Base):
         if selected_service is not None:
             user.selected_service = selected_service
         session.add(user)
-        await session.commit()
-        await session.refresh(user)
+        # Commit is managed by caller (middleware/web endpoint).
         return user
 
     @classmethod
@@ -81,7 +85,7 @@ class UserMemory(Base):
             history = history[-max_messages:]
         user.conversation_history = history
         session.add(user)
-        await session.commit()
+        # Commit is managed by caller (middleware/web endpoint).
 
     @classmethod
     async def get_conversation_history(

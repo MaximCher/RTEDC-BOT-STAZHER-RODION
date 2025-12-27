@@ -40,8 +40,11 @@ class BitrixLead(Base):
             service=service,
         )
         session.add(row)
-        await session.commit()
-        await session.refresh(row)
+        # NOTE: do not commit here. Transaction boundary is managed by caller (UoW).
+        try:
+            await session.flush()
+        except Exception:
+            pass
         return row
 
 

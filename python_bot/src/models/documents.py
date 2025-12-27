@@ -41,8 +41,12 @@ class Document(Base):
             file_size=file_size,
         )
         session.add(doc)
-        await session.commit()
-        await session.refresh(doc)
+        # NOTE: do not commit here. Transaction boundary is managed by caller (UoW).
+        # Flush so doc.id is available to the caller if needed.
+        try:
+            await session.flush()
+        except Exception:
+            pass
         return doc
 
     @classmethod

@@ -49,8 +49,9 @@ class DialogMessage(Base):
             message_id=message_id,
         )
         session.add(msg)
-        await session.commit()
-        await session.refresh(msg)
+        # NOTE: do not commit here. Transaction boundary is managed by caller (UoW).
+        # We intentionally don't flush/refresh to keep logging cheap; ID assignment is
+        # rarely needed for dialog/event logs.
         return msg
 
     @classmethod
