@@ -106,11 +106,8 @@ async def handle_service_questionnaire_start(
     if not flow:
         await callback.answer(msg("unknown_service"), show_alert=True)
         return
-    # UX: acknowledge click immediately to stop Telegram "loading" spinner
-    try:
-        await callback.answer("Открываю…", cache_time=1)
-    except Exception:
-        pass
+    # UX: keep Telegram "loading" animation on the pressed button.
+    # We'll answer the callback after UI is rendered.
 
     user_id = callback.from_user.id
     await UserMemory.update_user_data(session, user_id, selected_service=service_key)
@@ -154,6 +151,10 @@ async def handle_service_questionnaire_start(
         reply_markup=flow_nav_keyboard("q:back"),
         keep_at_bottom=True,
     )
+    try:
+        await callback.answer()
+    except Exception:
+        pass
 
 
 @router.callback_query(F.data.startswith("service:"))
@@ -167,11 +168,8 @@ async def handle_service_selection(
     if not flow:
         await callback.answer(msg("unknown_service"), show_alert=True)
         return
-    # UX: acknowledge click immediately to stop Telegram "loading" spinner
-    try:
-        await callback.answer("Открываю…", cache_time=1)
-    except Exception:
-        pass
+    # UX: keep Telegram "loading" animation on the pressed button.
+    # We'll answer the callback after UI is rendered.
 
     user_id = callback.from_user.id
 
@@ -199,6 +197,10 @@ async def handle_service_selection(
             await callback.message.edit_text(flow["description"], reply_markup=subsidies_entry_keyboard())
         except Exception:
             await callback.message.answer(flow["description"], reply_markup=subsidies_entry_keyboard())
+        try:
+            await callback.answer()
+        except Exception:
+            pass
         return
 
     if service_key == "international_payments":
@@ -207,6 +209,10 @@ async def handle_service_selection(
             await callback.message.edit_text(flow["description"], reply_markup=payments_entry_keyboard())
         except Exception:
             await callback.message.answer(flow["description"], reply_markup=payments_entry_keyboard())
+        try:
+            await callback.answer()
+        except Exception:
+            pass
         return
 
     if service_key == "logistics_ved":
@@ -215,6 +221,10 @@ async def handle_service_selection(
             await callback.message.edit_text(flow["description"], reply_markup=logistics_entry_keyboard())
         except Exception:
             await callback.message.answer(flow["description"], reply_markup=logistics_entry_keyboard())
+        try:
+            await callback.answer()
+        except Exception:
+            pass
         return
 
     if service_key == "analytics_tnved":
@@ -223,6 +233,10 @@ async def handle_service_selection(
             await callback.message.edit_text(flow["description"], reply_markup=analytics_entry_keyboard())
         except Exception:
             await callback.message.answer(flow["description"], reply_markup=analytics_entry_keyboard())
+        try:
+            await callback.answer()
+        except Exception:
+            pass
         return
 
     if service_key == "club_partnership":
@@ -231,6 +245,10 @@ async def handle_service_selection(
             await callback.message.edit_text(flow["description"], reply_markup=club_entry_keyboard())
         except Exception:
             await callback.message.answer(flow["description"], reply_markup=club_entry_keyboard())
+        try:
+            await callback.answer()
+        except Exception:
+            pass
         return
 
     await state.set_state(ServiceQuestionnaire.waiting_for_answer)

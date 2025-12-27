@@ -106,15 +106,16 @@ async def cmd_start_deeplink(
 
 @router.callback_query(F.data == "menu:root")
 async def back_to_menu(callback: CallbackQuery, state: FSMContext) -> None:
-    # UX: acknowledge click immediately to stop Telegram "loading" spinner
-    try:
-        await callback.answer("Открываю меню…", cache_time=1)
-    except Exception:
-        pass
+    # UX: keep Telegram "loading" animation on the pressed button.
+    # We'll answer the callback after UI is rendered.
     await state.clear()
     # UX: avoid chat spam. Prefer re-rendering menu in the same message.
     try:
         await callback.message.edit_text(msg("welcome"), reply_markup=services_keyboard())
+        try:
+            await callback.answer()
+        except Exception:
+            pass
         return
     except Exception:
         pass
@@ -129,29 +130,35 @@ async def back_to_menu(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.message.bot.send_message(chat_id, msg("welcome"), reply_markup=services_keyboard())
     except Exception:
         pass
+    try:
+        await callback.answer()
+    except Exception:
+        pass
 
 
 @router.callback_query(F.data == "menu:new")
 async def open_menu_new_message(callback: CallbackQuery) -> None:
     """Open menu without editing/deleting the current message (keeps important info in history)."""
-    # UX: acknowledge click immediately to stop Telegram "loading" spinner
+    # UX: keep Telegram "loading" animation on the pressed button.
+    # We'll answer the callback after UI is rendered.
+    await callback.message.answer(msg("welcome"), reply_markup=services_keyboard())
     try:
-        await callback.answer("Открываю меню…", cache_time=1)
+        await callback.answer()
     except Exception:
         pass
-    await callback.message.answer(msg("welcome"), reply_markup=services_keyboard())
 
 
 @router.callback_query(F.data.startswith("entry:new:"))
 async def open_entry_new_message(callback: CallbackQuery) -> None:
     """Open a service entry screen without editing/deleting the current message."""
-    # UX: acknowledge click immediately to stop Telegram "loading" spinner
-    try:
-        await callback.answer("Открываю…", cache_time=1)
-    except Exception:
-        pass
+    # UX: keep Telegram "loading" animation on the pressed button.
+    # We'll answer the callback after UI is rendered.
     service_key = (callback.data or "").split("entry:new:", 1)[-1].strip()
     text, kb, pm = entry_screen_for_service(service_key)
     await callback.message.answer(text, reply_markup=kb, parse_mode=pm)
+    try:
+        await callback.answer()
+    except Exception:
+        pass
 
 
