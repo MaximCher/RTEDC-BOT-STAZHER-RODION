@@ -115,6 +115,10 @@ async def start_quick_audit(callback: CallbackQuery, state: FSMContext, session:
         ),
         reply_markup=flow_nav_keyboard("audit:quick:back"),
         keep_at_bottom=True,
+        persist=True,
+        session=session,
+        user_id=callback.from_user.id,
+        username=callback.from_user.username,
     )
     await callback.answer()
 
@@ -151,6 +155,10 @@ async def handle_quick_audit_answer(message: Message, state: FSMContext, session
                 ),
                 reply_markup=flow_nav_keyboard("audit:quick:back"),
                 keep_at_bottom=True,
+                persist=True,
+                session=session,
+                user_id=message.from_user.id,
+                username=message.from_user.username,
             )
             return
         text = m.group(0)
@@ -186,6 +194,10 @@ async def handle_quick_audit_answer(message: Message, state: FSMContext, session
             ),
             reply_markup=flow_nav_keyboard("audit:quick:back"),
             keep_at_bottom=True,
+            persist=True,
+            session=session,
+            user_id=message.from_user.id,
+            username=message.from_user.username,
         )
         return
 

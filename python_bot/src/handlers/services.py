@@ -159,6 +159,10 @@ async def handle_service_questionnaire_start(
         text=text,
         reply_markup=flow_nav_keyboard("q:back"),
         keep_at_bottom=True,
+        persist=True,
+        session=session,
+        user_id=callback.from_user.id,
+        username=callback.from_user.username,
     )
     try:
         await callback.answer()
@@ -305,6 +309,10 @@ async def handle_service_selection(
         text=text,
         reply_markup=flow_nav_keyboard("q:back"),
         keep_at_bottom=True,
+        persist=True,
+        session=session,
+        user_id=callback.from_user.id,
+        username=callback.from_user.username,
     )
 
 
@@ -404,4 +412,8 @@ async def handle_questionnaire_answer(
         ),
         reply_markup=flow_nav_keyboard("q:back"),
         keep_at_bottom=True,
+        persist=True,
+        session=session,
+        user_id=user_id,
+        username=message.from_user.username,
     )

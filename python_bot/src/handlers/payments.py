@@ -1,20 +1,19 @@
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
 from src.services.subsidy_calc import parse_money_rub
 from src.utils.funnel import log_event
 from src.utils.keyboards import flow_nav_keyboard, lead_actions_keyboard
-from src.utils.ui_flow import format_step, ui_upsert, ui_send_persistent
 from src.utils.service_entry import entry_screen_for_service
+from src.utils.ui_flow import format_step, ui_send_persistent, ui_upsert
 
 router = Router()
 
@@ -24,12 +23,20 @@ class PaymentsPrecheck(StatesGroup):
 
 
 _PAYMENTS_QUESTIONS: List[Tuple[str, str]] = [
-    ("direction", "1) Направление: отправить из РФ или получить в РФ? (отправить/получить)"),
+    (
+        "direction",
+        "1) Направление: отправить из РФ или получить в РФ? (отправить/получить)",
+    ),
     ("country", "2) Страна контрагента (куда/откуда)"),
     ("amount", "3) Сумма и валюта. Пример: «25 000 USD» или «1,2 млн ₽»"),
-    ("purpose", "4) Назначение платежа (товар/услуги/ПО/роялти/другое) + кратко что за сделка"),
-    ("docs", "5) Есть контракт/инвойс? (да/нет/в процессе)"),
-    ("urgency", "6) Срочность: сегодня / 1–3 дня / неделя+"),
+    (
+        "purpose",
+        "4) Назначение платежа (товар/услуги/ПО/роялти/другое) + кратко что за сделка",
+    ),
+    (
+        "docs",
+        "5) Есть контракт/инвойс и насколько срочно? (да/нет/в процессе + сегодня/1–3 дня/неделя+)",
+    ),
 ]
 
 
@@ -39,7 +46,9 @@ def _has_any_amount(text: str) -> bool:
 
 
 @router.callback_query(F.data == "payments:precheck:back")
-async def payments_precheck_back(callback: CallbackQuery, state: FSMContext) -> None:
+async def payments_precheck_back(
+    callback: CallbackQuery, state: FSMContext
+) -> None:
     current = await state.get_state()
     if current != PaymentsPrecheck.waiting_for_answer.state:
         await callback.answer()
@@ -48,7 +57,11 @@ async def payments_precheck_back(callback: CallbackQuery, state: FSMContext) -> 
     data = await state.get_data()
     step = int(data.get("pay_step", 0))
     answers: Dict[str, str] = dict(data.get("pay_answers") or {})
-    service_key = data.get("service_key") if isinstance(data.get("service_key"), str) else "international_payments"
+    service_key = (
+        data.get("service_key")
+        if isinstance(data.get("service_key"), str)
+        else "international_payments"
+    )
 
     if step <= 0:
         await state.clear()
@@ -89,13 +102,19 @@ async def payments_precheck_back(callback: CallbackQuery, state: FSMContext) -> 
 
 
 @router.callback_query(F.data.startswith("payments:precheck:start:"))
-async def start_payments_precheck(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
-    service_key = (callback.data or "").split("payments:precheck:start:", 1)[-1].strip()
+async def start_payments_precheck(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    service_key = (
+        (callback.data or "").split("payments:precheck:start:", 1)[-1].strip()
+    )
     if not service_key:
         service_key = "international_payments"
 
     await state.set_state(PaymentsPrecheck.waiting_for_answer)
-    await state.update_data(service_key=service_key, pay_step=0, pay_answers={})
+    await state.update_data(
+        service_key=service_key, pay_step=0, pay_answers={}
+    )
 
     await log_event(
         session,
@@ -120,12 +139,18 @@ async def start_payments_precheck(callback: CallbackQuery, state: FSMContext, se
         ),
         reply_markup=flow_nav_keyboard("payments:precheck:back"),
         keep_at_bottom=True,
+        persist=True,
+        session=session,
+        user_id=callback.from_user.id,
+        username=callback.from_user.username,
     )
     await callback.answer()
 
 
 @router.message(PaymentsPrecheck.waiting_for_answer)
-async def handle_payments_precheck_answer(message: Message, state: FSMContext, session: AsyncSession) -> None:
+async def handle_payments_precheck_answer(
+    message: Message, state: FSMContext, session: AsyncSession
+) -> None:
     text = (message.text or "").strip()
     if not text:
         return
@@ -133,7 +158,11 @@ async def handle_payments_precheck_answer(message: Message, state: FSMContext, s
     data = await state.get_data()
     step = int(data.get("pay_step", 0))
     answers: Dict[str, str] = dict(data.get("pay_answers") or {})
-    service_key = data.get("service_key") if isinstance(data.get("service_key"), str) else "international_payments"
+    service_key = (
+        data.get("service_key")
+        if isinstance(data.get("service_key"), str)
+        else "international_payments"
+    )
 
     if step < 0 or step >= len(_PAYMENTS_QUESTIONS):
         await state.clear()
@@ -154,13 +183,19 @@ async def handle_payments_precheck_answer(message: Message, state: FSMContext, s
             ),
             reply_markup=flow_nav_keyboard("payments:precheck:back"),
             keep_at_bottom=True,
+            persist=True,
+            session=session,
+            user_id=message.from_user.id,
+            username=message.from_user.username,
         )
         return
 
     answers[key] = text[:600]
 
     # Persist user answer
-    await UserMemory.add_message(session, message.from_user.id, "user", f"{q_text}\nОтвет: {text}")
+    await UserMemory.add_message(
+        session, message.from_user.id, "user", f"{q_text}\nОтвет: {text}"
+    )
     await DialogMessage.create(
         session,
         user_id=message.from_user.id,
@@ -189,6 +224,10 @@ async def handle_payments_precheck_answer(message: Message, state: FSMContext, s
             ),
             reply_markup=flow_nav_keyboard("payments:precheck:back"),
             keep_at_bottom=True,
+            persist=True,
+            session=session,
+            user_id=message.from_user.id,
+            username=message.from_user.username,
         )
         return
 
@@ -214,7 +253,9 @@ async def handle_payments_precheck_answer(message: Message, state: FSMContext, s
     if rub:
         summary_lines.append(f"(детект) Сумма в ₽: ~{rub:,}".replace(",", " "))
 
-    summary_lines.append("SRVT обещание: персональный менеджер свяжется в ближайшее время (в рабочее время).")
+    summary_lines.append(
+        "SRVT обещание: персональный менеджер свяжется в ближайшее время (в рабочее время)."
+    )
     summary_text = "\n\n".join(summary_lines)
 
     await log_event(
@@ -226,7 +267,9 @@ async def handle_payments_precheck_answer(message: Message, state: FSMContext, s
         service_key=service_key,
     )
 
-    await UserMemory.add_message(session, message.from_user.id, "system", summary_text)
+    await UserMemory.add_message(
+        session, message.from_user.id, "system", summary_text
+    )
     await state.update_data(questionnaire_summary=summary_text)
 
     await ui_send_persistent(
@@ -241,5 +284,3 @@ async def handle_payments_precheck_answer(message: Message, state: FSMContext, s
         user_id=message.from_user.id,
         username=message.from_user.username,
     )
-
-

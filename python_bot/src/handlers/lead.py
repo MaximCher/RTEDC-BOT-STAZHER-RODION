@@ -44,7 +44,9 @@ class LeadForm(StatesGroup):
 
 
 @router.callback_query(F.data == "lead:back")
-async def lead_back(callback: CallbackQuery, state: FSMContext) -> None:
+async def lead_back(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
     # UX: acknowledge click immediately to stop Telegram "loading" spinner
     try:
         await callback.answer()
@@ -109,6 +111,10 @@ async def lead_back(callback: CallbackQuery, state: FSMContext) -> None:
         ),
         reply_markup=flow_nav_keyboard("lead:back"),
         keep_at_bottom=True,
+        persist=True,
+        session=session,
+        user_id=callback.from_user.id,
+        username=callback.from_user.username,
     )
 
 
@@ -145,6 +151,10 @@ async def lead_start(
         ),
         reply_markup=flow_nav_keyboard("lead:back"),
         keep_at_bottom=True,
+        persist=True,
+        session=session,
+        user_id=callback.from_user.id,
+        username=callback.from_user.username,
     )
 
 
@@ -180,6 +190,10 @@ async def lead_process_inn(
             ),
             reply_markup=flow_nav_keyboard("lead:back"),
             keep_at_bottom=True,
+            persist=True,
+            session=session,
+            user_id=message.from_user.id,
+            username=message.from_user.username,
         )
         return
 
@@ -209,6 +223,10 @@ async def lead_process_inn(
         ),
         reply_markup=flow_nav_keyboard("lead:back"),
         keep_at_bottom=True,
+        persist=True,
+        session=session,
+        user_id=message.from_user.id,
+        username=message.from_user.username,
     )
 
 
@@ -244,6 +262,10 @@ async def lead_process_contact(
             ),
             reply_markup=flow_nav_keyboard("lead:back"),
             keep_at_bottom=True,
+            persist=True,
+            session=session,
+            user_id=message.from_user.id,
+            username=message.from_user.username,
         )
         return
 
@@ -257,6 +279,10 @@ async def lead_process_contact(
             reply_markup=services_keyboard(),
             parse_mode=None,
             keep_at_bottom=True,
+            persist=True,
+            session=session,
+            user_id=message.from_user.id,
+            username=message.from_user.username,
         )
         return
     username = message.from_user.username
@@ -313,6 +339,12 @@ async def lead_process_contact(
         ),
         reply_markup=meeting_window_keyboard(include_back=True),
         keep_at_bottom=True,
+        persist=True,
+        session=session,
+        user_id=message.from_user.id,
+        username=message.from_user.username,
+        full_name=full_name,
+        phone=phone,
     )
 
 

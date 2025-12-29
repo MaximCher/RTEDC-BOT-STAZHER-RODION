@@ -26,9 +26,11 @@ _LOG_QUESTIONS: List[Tuple[str, str]] = [
     ("route", "1) Откуда → куда (страна/город). Пример: «Шанхай → Москва»"),
     ("cargo", "2) Что за товар/груз? (можно ТН ВЭД, если знаете)"),
     ("dims", "3) Вес и объём (или кол-во мест). Пример: «1200 кг, 6 м³»"),
-    ("terms", "4) Условия: Incoterms (EXW/FOB/CIF/DDP) или «не знаю»"),
+    (
+        "terms",
+        "4) Условия: Incoterms (EXW/FOB/CIF/DDP) или «не знаю» + особые требования (опасный/температура/сертификация/нет)",
+    ),
     ("timeline", "5) Когда нужно доставить? (сейчас/1–2 недели/месяц+)"),
-    ("special", "6) Особые требования: опасный/температура/сертификация/ничего"),
 ]
 
 
@@ -118,6 +120,10 @@ async def start_logistics_quote(callback: CallbackQuery, state: FSMContext, sess
         ),
         reply_markup=flow_nav_keyboard("logistics:quote:back"),
         keep_at_bottom=True,
+        persist=True,
+        session=session,
+        user_id=callback.from_user.id,
+        username=callback.from_user.username,
     )
     await callback.answer()
 
@@ -152,6 +158,10 @@ async def handle_logistics_quote_answer(message: Message, state: FSMContext, ses
             ),
             reply_markup=flow_nav_keyboard("logistics:quote:back"),
             keep_at_bottom=True,
+            persist=True,
+            session=session,
+            user_id=message.from_user.id,
+            username=message.from_user.username,
         )
         return
 
@@ -186,6 +196,10 @@ async def handle_logistics_quote_answer(message: Message, state: FSMContext, ses
             ),
             reply_markup=flow_nav_keyboard("logistics:quote:back"),
             keep_at_bottom=True,
+            persist=True,
+            session=session,
+            user_id=message.from_user.id,
+            username=message.from_user.username,
         )
         return
 

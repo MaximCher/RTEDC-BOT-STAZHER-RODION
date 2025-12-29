@@ -30,28 +30,29 @@ def flow_nav_keyboard(back_callback_data: str | None = None) -> InlineKeyboardMa
 
 
 def lead_actions_keyboard(service_key: str) -> InlineKeyboardMarkup:
-    first_row = [
-        InlineKeyboardButton(
-            text="📩 Заявка на консультацию",
-            callback_data=f"lead:start:{service_key}",
-        )
+    # UX: keep CTAs stable — 1 button per row (avoid narrow "two-column" layouts).
+    rows = [
+        [
+            InlineKeyboardButton(
+                text="📩 Заявка на консультацию",
+                callback_data=f"lead:start:{service_key}",
+            )
+        ]
     ]
     if service_key == "subsidies_financing":
-        first_row.append(
-            InlineKeyboardButton(
-                text="🔎 Вопрос по субсидиям",
-                callback_data=f"subsidy:chat:start:{service_key}",
-            )
-        )
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            first_row,
+        rows.append(
             [
-                InlineKeyboardButton(text="⬅️ Назад", callback_data=f"entry:new:{service_key}"),
-            ],
-            [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:new")],
-        ]
-    )
+                InlineKeyboardButton(
+                    text="🔎 Вопрос по субсидиям",
+                    callback_data=f"subsidy:chat:start:{service_key}",
+                )
+            ]
+        )
+    rows += [
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"entry:new:{service_key}")],
+        [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:new")],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def subsidy_chat_keyboard(service_key: str) -> InlineKeyboardMarkup:
@@ -200,20 +201,15 @@ def club_entry_keyboard() -> InlineKeyboardMarkup:
 
 
 def meeting_window_keyboard(include_back: bool = False) -> InlineKeyboardMarkup:
+    # UX: keep options full-width and stable (1 button per row).
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(text="Сегодня 10:00–13:00", callback_data="lead:mw:today_am"),
-                InlineKeyboardButton(text="Сегодня 14:00–18:00", callback_data="lead:mw:today_pm"),
-            ],
-            [
-                InlineKeyboardButton(text="Завтра 10:00–13:00", callback_data="lead:mw:tomorrow_am"),
-                InlineKeyboardButton(text="Завтра 14:00–18:00", callback_data="lead:mw:tomorrow_pm"),
-            ],
-            [
-                InlineKeyboardButton(text="Будни после 19:00", callback_data="lead:mw:weekdays_19"),
-                InlineKeyboardButton(text="Не важно", callback_data="lead:mw:any"),
-            ],
+            [InlineKeyboardButton(text="Сегодня 10:00–13:00", callback_data="lead:mw:today_am")],
+            [InlineKeyboardButton(text="Сегодня 14:00–18:00", callback_data="lead:mw:today_pm")],
+            [InlineKeyboardButton(text="Завтра 10:00–13:00", callback_data="lead:mw:tomorrow_am")],
+            [InlineKeyboardButton(text="Завтра 14:00–18:00", callback_data="lead:mw:tomorrow_pm")],
+            [InlineKeyboardButton(text="Будни после 19:00", callback_data="lead:mw:weekdays_19")],
+            [InlineKeyboardButton(text="Не важно", callback_data="lead:mw:any")],
             (
                 [
                     InlineKeyboardButton(text="⬅️ Назад", callback_data="lead:back"),

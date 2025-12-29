@@ -137,6 +137,10 @@ async def start_club_apply(
         ),
         reply_markup=flow_nav_keyboard("club:apply:back"),
         keep_at_bottom=True,
+        persist=True,
+        session=session,
+        user_id=callback.from_user.id,
+        username=callback.from_user.username,
     )
     await callback.answer()
 
@@ -196,6 +200,10 @@ async def handle_club_apply_answer(
             ),
             reply_markup=flow_nav_keyboard("club:apply:back"),
             keep_at_bottom=True,
+            persist=True,
+            session=session,
+            user_id=message.from_user.id,
+            username=message.from_user.username,
         )
         return
 

@@ -8,9 +8,7 @@ from typing import Optional
 from aiogram import Bot
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup
-
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.models.dialog_message import DialogMessage
 
 UI_MESSAGE_ID_KEY = "_ui_message_id"
@@ -23,7 +21,14 @@ def _coerce_bool(v: object, default: bool = False) -> bool:
     return default
 
 
-def format_step(*, title: str, step: int, total: int, question: str, intro: Optional[str] = None) -> str:
+def format_step(
+    *,
+    title: str,
+    step: int,
+    total: int,
+    question: str,
+    intro: Optional[str] = None,
+) -> str:
     title_h = html.escape(title)
     intro_h = html.escape(intro) if intro else ""
     question_h = html.escape(question)
@@ -33,6 +38,22 @@ def format_step(*, title: str, step: int, total: int, question: str, intro: Opti
     parts.append("")
     parts.append(question_h)
     return "\n".join(parts).strip()
+
+
+def _to_plain_text(text: str) -> str:
+    """
+    Admin UI renders plain text. When we send HTML to Telegram, store a readable version.
+    """
+    raw = text or ""
+    # naive, but good enough for our limited markup usage (<b>, <i>, etc.)
+    raw = re.sub(r"<[^>]+>", "", raw)
+    raw = html.unescape(raw).strip()
+    # Make history less "technical": drop the "Шаг X/Y" line from format_step().
+    lines = [ln.strip() for ln in raw.splitlines()]
+    lines = [ln for ln in lines if ln]
+    if len(lines) >= 2 and re.match(r"^Шаг\s+\d+\s*/\s*\d+\s*$", lines[1]):
+        lines.pop(1)
+    return "\n".join(lines).strip()
 
 
 async def ui_upsert(
@@ -45,6 +66,13 @@ async def ui_upsert(
     prefer_message_id: Optional[int] = None,
     parse_mode: str | None = "HTML",
     keep_at_bottom: bool = False,
+    # Optional: persist message to admin "conversation" history (DialogMessage)
+    persist: bool = False,
+    session: Optional[AsyncSession] = None,
+    user_id: Optional[int] = None,
+    username: Optional[str] = None,
+    full_name: Optional[str] = None,
+    phone: Optional[str] = None,
 ) -> None:
     """
     Render flow UI in a single message:
@@ -63,8 +91,30 @@ async def ui_upsert(
             reply_markup=reply_markup,
             parse_mode=parse_mode,
         )
+        if (
+            persist
+            and session is not None
+            and isinstance(user_id, int)
+            and user_id > 0
+        ):
+            try:
+                await DialogMessage.create(
+                    session,
+                    user_id=user_id,
+                    username=username,
+                    full_name=full_name,
+                    phone=phone,
+                    message_text=_to_plain_text(text),
+                    role="assistant",
+                    chat_id=chat_id,
+                    message_id=int(sent.message_id),
+                )
+            except Exception:
+                pass
         new_id = int(sent.message_id)
-        await state.update_data(**{UI_MESSAGE_ID_KEY: new_id, UI_MODE_KEY: "bottom"})
+        await state.update_data(
+            **{UI_MESSAGE_ID_KEY: new_id, UI_MODE_KEY: "bottom"}
+        )
         # Best-effort cleanup
         # IMPORTANT: when we switch screens via callback_query, `prefer_message_id`
         # can point to the *entry screen* message, while `msg_id` points to a previous
@@ -80,7 +130,9 @@ async def ui_upsert(
                 continue
             try:
                 # Fire-and-forget: deletion is non-critical and can be slow.
-                asyncio.create_task(bot.delete_message(chat_id=chat_id, message_id=old_id))
+                asyncio.create_task(
+                    bot.delete_message(chat_id=chat_id, message_id=old_id)
+                )
             except Exception:
                 pass
         return
@@ -94,6 +146,26 @@ async def ui_upsert(
                 reply_markup=reply_markup,
                 parse_mode=parse_mode,
             )
+            if (
+                persist
+                and session is not None
+                and isinstance(user_id, int)
+                and user_id > 0
+            ):
+                try:
+                    await DialogMessage.create(
+                        session,
+                        user_id=user_id,
+                        username=username,
+                        full_name=full_name,
+                        phone=phone,
+                        message_text=_to_plain_text(text),
+                        role="assistant",
+                        chat_id=chat_id,
+                        message_id=int(msg_id),
+                    )
+                except Exception:
+                    pass
             await state.update_data(**{UI_MODE_KEY: "edit"})
             return
         except Exception:
@@ -109,6 +181,26 @@ async def ui_upsert(
                 reply_markup=reply_markup,
                 parse_mode=parse_mode,
             )
+            if (
+                persist
+                and session is not None
+                and isinstance(user_id, int)
+                and user_id > 0
+            ):
+                try:
+                    await DialogMessage.create(
+                        session,
+                        user_id=user_id,
+                        username=username,
+                        full_name=full_name,
+                        phone=phone,
+                        message_text=_to_plain_text(text),
+                        role="assistant",
+                        chat_id=chat_id,
+                        message_id=int(prefer_message_id),
+                    )
+                except Exception:
+                    pass
             await state.update_data(**{UI_MESSAGE_ID_KEY: prefer_message_id})
             return
         except Exception:
@@ -120,7 +212,29 @@ async def ui_upsert(
         reply_markup=reply_markup,
         parse_mode=parse_mode,
     )
-    await state.update_data(**{UI_MESSAGE_ID_KEY: int(sent.message_id), UI_MODE_KEY: "send"})
+    if (
+        persist
+        and session is not None
+        and isinstance(user_id, int)
+        and user_id > 0
+    ):
+        try:
+            await DialogMessage.create(
+                session,
+                user_id=user_id,
+                username=username,
+                full_name=full_name,
+                phone=phone,
+                message_text=_to_plain_text(text),
+                role="assistant",
+                chat_id=chat_id,
+                message_id=int(sent.message_id),
+            )
+        except Exception:
+            pass
+    await state.update_data(
+        **{UI_MESSAGE_ID_KEY: int(sent.message_id), UI_MODE_KEY: "send"}
+    )
 
 
 async def ui_send_persistent(
@@ -158,12 +272,13 @@ async def ui_send_persistent(
         parse_mode=parse_mode,
     )
 
-    if persist and session is not None and isinstance(user_id, int) and user_id > 0:
-        # Admin UI renders plain text. If we sent HTML, store a readable version.
-        raw = text or ""
-        # naive, but good enough for our limited markup usage (<b>, <i>, etc.)
-        raw = re.sub(r"<[^>]+>", "", raw)
-        raw = html.unescape(raw).strip()
+    if (
+        persist
+        and session is not None
+        and isinstance(user_id, int)
+        and user_id > 0
+    ):
+        raw = _to_plain_text(text)
         try:
             await DialogMessage.create(
                 session,
@@ -179,6 +294,6 @@ async def ui_send_persistent(
         except Exception:
             pass
     # Clear transient tracking so future UI updates won't target the persistent message.
-    await state.update_data(**{UI_MESSAGE_ID_KEY: 0, UI_MODE_KEY: "persistent"})
-
-
+    await state.update_data(
+        **{UI_MESSAGE_ID_KEY: 0, UI_MODE_KEY: "persistent"}
+    )

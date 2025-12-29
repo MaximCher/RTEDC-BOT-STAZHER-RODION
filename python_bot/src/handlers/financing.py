@@ -151,6 +151,10 @@ async def start_finance_calc(
         text=text,
         reply_markup=flow_nav_keyboard("finance:calc:back"),
         keep_at_bottom=True,
+        persist=True,
+        session=session,
+        user_id=callback.from_user.id,
+        username=callback.from_user.username,
     )
     await callback.answer()
 
@@ -190,6 +194,10 @@ async def handle_finance_calc_answer(
                 ),
                 reply_markup=flow_nav_keyboard("finance:calc:back"),
                 keep_at_bottom=True,
+                persist=True,
+                session=session,
+                user_id=user_id,
+                username=message.from_user.username,
             )
             return
     if key == "rate" and text.lower() not in {
@@ -212,6 +220,10 @@ async def handle_finance_calc_answer(
                 ),
                 reply_markup=flow_nav_keyboard("finance:calc:back"),
                 keep_at_bottom=True,
+                persist=True,
+                session=session,
+                user_id=user_id,
+                username=message.from_user.username,
             )
             return
     if key == "term":
@@ -229,6 +241,10 @@ async def handle_finance_calc_answer(
                 ),
                 reply_markup=flow_nav_keyboard("finance:calc:back"),
                 keep_at_bottom=True,
+                persist=True,
+                session=session,
+                user_id=user_id,
+                username=message.from_user.username,
             )
             return
 
@@ -266,6 +282,10 @@ async def handle_finance_calc_answer(
             ),
             reply_markup=flow_nav_keyboard("finance:calc:back"),
             keep_at_bottom=True,
+            persist=True,
+            session=session,
+            user_id=user_id,
+            username=message.from_user.username,
         )
         return
 

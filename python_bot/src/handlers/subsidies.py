@@ -154,6 +154,10 @@ async def start_subsidy_calc(callback: CallbackQuery, state: FSMContext, session
         ),
         reply_markup=flow_nav_keyboard("subsidy:calc:back"),
         keep_at_bottom=True,
+        persist=True,
+        session=session,
+        user_id=callback.from_user.id,
+        username=callback.from_user.username,
     )
     await callback.answer()
 
@@ -191,6 +195,10 @@ async def handle_subsidy_calc_answer(message: Message, state: FSMContext, sessio
                 ),
                 reply_markup=flow_nav_keyboard("subsidy:calc:back"),
                 keep_at_bottom=True,
+                persist=True,
+                session=session,
+                user_id=user_id,
+                username=message.from_user.username,
             )
             return
 
@@ -226,6 +234,10 @@ async def handle_subsidy_calc_answer(message: Message, state: FSMContext, sessio
             ),
             reply_markup=flow_nav_keyboard("subsidy:calc:back"),
             keep_at_bottom=True,
+            persist=True,
+            session=session,
+            user_id=user_id,
+            username=message.from_user.username,
         )
         return
 
@@ -289,7 +301,9 @@ async def handle_subsidy_calc_answer(message: Message, state: FSMContext, sessio
 
 
 @router.callback_query(F.data.startswith("subsidy:chat:start:"))
-async def start_subsidy_chat(callback: CallbackQuery, state: FSMContext) -> None:
+async def start_subsidy_chat(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
     service_key = (callback.data or "").split("subsidy:chat:start:", 1)[-1].strip()
     await state.set_state(SubsidyChat.waiting_for_question)
     await state.update_data(service_key=service_key)
@@ -309,6 +323,10 @@ async def start_subsidy_chat(callback: CallbackQuery, state: FSMContext) -> None
         ),
         reply_markup=flow_nav_keyboard("subsidy:chat:back"),
         keep_at_bottom=True,
+        persist=True,
+        session=session,
+        user_id=callback.from_user.id,
+        username=callback.from_user.username,
     )
     await callback.answer()
 
@@ -429,4 +447,8 @@ async def handle_subsidy_question(
         ),
         reply_markup=flow_nav_keyboard("subsidy:chat:back"),
         keep_at_bottom=True,
+        persist=True,
+        session=session,
+        user_id=user_id,
+        username=message.from_user.username,
     )
