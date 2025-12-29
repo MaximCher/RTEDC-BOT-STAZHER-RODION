@@ -4,26 +4,130 @@ from datetime import datetime
 
 from aiogram import F, Router
 from aiogram.filters import CommandObject, CommandStart
-from aiogram.utils.deep_linking import decode_payload
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message, MenuButtonWebApp, WebAppInfo
+from aiogram.types import (
+    CallbackQuery,
+    KeyboardButton,
+    MenuButtonWebApp,
+    Message,
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+    WebAppInfo,
+)
+from aiogram.utils.deep_linking import decode_payload
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.config import settings
+from src.models.app_setting import AppSetting
+from src.models.required_subscription import RequiredSubscription
 from src.models.staff import StaffMember
 from src.models.staff_invite import StaffInvite
-from src.services.staff_service import is_admin, touch_staff_profile
-from src.utils.service_entry import entry_screen_for_service
+from src.models.user_memory import UserMemory
+from src.services.staff_service import is_admin, is_staff, touch_staff_profile
+from src.utils.access_gate import gate_keyboard, gate_text
 from src.utils.keyboards import services_keyboard
 from src.utils.messages import msg
+from src.utils.service_entry import entry_screen_for_service
 from src.utils.webapp_url import get_webapp_public_url
-
 
 router = Router()
 
 
-async def _render_menu(message: Message, state: FSMContext, session: AsyncSession) -> None:
+async def _ask_contact_enabled(session: AsyncSession) -> bool:
+    raw = await AppSetting.get(session, "ask_contact_on_start")
+    return (raw or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+async def _required_subscriptions(
+    session: AsyncSession,
+) -> list[RequiredSubscription]:
+    return await RequiredSubscription.list_all(session)
+
+
+def _chat_ref_for_api(chat_ref: str) -> str | int:
+    t = (chat_ref or "").strip()
+    # If admin stored a URL (invite link), we can't verify via getChatMember.
+    # Caller should skip verification in that case.
+    if t.lstrip("-").isdigit():
+        try:
+            return int(t)
+        except Exception:
+            return t
+    return t
+
+
+async def _check_gate(
+    *, bot, session: AsyncSession, user_id: int
+) -> tuple[bool, list[RequiredSubscription], str | None]:
+    # Staff should never be blocked by marketing gates
+    try:
+        if await is_staff(session, user_id):
+            return True, [], None
+    except Exception:
+        pass
+
+    req = await _required_subscriptions(session)
+    if not req:
+        return True, [], None
+
+    missing: list[RequiredSubscription] = []
+    for it in req:
+        # If chat_ref is a URL, it's "open-only" (can't be verified).
+        if (
+            (it.chat_ref or "")
+            .strip()
+            .startswith(("http://", "https://", "t.me/"))
+        ):
+            continue
+        try:
+            cm = await bot.get_chat_member(
+                _chat_ref_for_api(it.chat_ref), user_id
+            )
+            status = getattr(cm, "status", None)
+            if status in {"left", "kicked"}:
+                missing.append(it)
+        except Exception:
+            # If we cannot verify (bot not admin/member), treat as missing.
+            missing.append(it)
+    return len(missing) == 0, missing, None
+
+
+async def _maybe_request_contact(
+    message: Message, session: AsyncSession
+) -> bool:
+    """
+    Ask user to share contact via ReplyKeyboard (Telegram requires explicit user action).
+    Returns True if we requested contact, False otherwise.
+    """
+    if not await _ask_contact_enabled(session):
+        return False
+    um = await UserMemory.get_or_create(session, message.from_user.id)
+    if um.phone:
+        return False
+
+    kb = ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(
+                    text="📲 Поделиться контактом", request_contact=True
+                )
+            ],
+            [KeyboardButton(text="Пропустить")],
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+        selective=True,
+    )
+    await message.answer(
+        "Чтобы менеджер мог быстро с вами связаться, поделитесь контактом (номер телефона).",
+        reply_markup=kb,
+    )
+    return True
+
+
+async def _render_menu(
+    message: Message, state: FSMContext, session: AsyncSession
+) -> None:
     await state.clear()
 
     # Update staff profile (if user is staff)
@@ -44,17 +148,36 @@ async def _render_menu(message: Message, state: FSMContext, session: AsyncSessio
                 chat_id=message.chat.id,
                 menu_button=MenuButtonWebApp(
                     text="Админка SRVT",
-                    web_app=WebAppInfo(url=get_webapp_public_url(settings.webapp_public_url)),
+                    web_app=WebAppInfo(
+                        url=get_webapp_public_url(settings.webapp_public_url)
+                    ),
                 ),
             )
     except Exception:
         # do not block /start on menu button errors
         pass
+
+    allowed, missing, _ = await _check_gate(
+        bot=message.bot, session=session, user_id=message.from_user.id
+    )
+    if not allowed:
+        await message.answer(
+            gate_text(missing), reply_markup=gate_keyboard(missing)
+        )
+        return
+
+    # Optional: ask contact right after access check
+    requested = await _maybe_request_contact(message, session)
+    if requested:
+        return
+
     await message.answer(msg("welcome"), reply_markup=services_keyboard())
 
 
 @router.message(CommandStart())
-async def cmd_start(message: Message, state: FSMContext, session: AsyncSession) -> None:
+async def cmd_start(
+    message: Message, state: FSMContext, session: AsyncSession
+) -> None:
     await _render_menu(message, state, session)
 
 
@@ -76,9 +199,17 @@ async def cmd_start_deeplink(
     if payload.startswith("invite_"):
         token = payload.split("invite_", 1)[-1].strip()
         inv = await StaffInvite.get_by_token(session, token)
-        if inv and inv.used_by_tg_user_id is None and (not inv.expires_at or inv.expires_at >= datetime.utcnow()):
+        if (
+            inv
+            and inv.used_by_tg_user_id is None
+            and (not inv.expires_at or inv.expires_at >= datetime.utcnow())
+        ):
             existing = (
-                await session.execute(select(StaffMember).where(StaffMember.tg_user_id == message.from_user.id))
+                await session.execute(
+                    select(StaffMember).where(
+                        StaffMember.tg_user_id == message.from_user.id
+                    )
+                )
             ).scalar_one_or_none()
             if existing:
                 existing.role = inv.role
@@ -98,20 +229,46 @@ async def cmd_start_deeplink(
             inv.used_by_tg_user_id = message.from_user.id
             inv.used_at = datetime.utcnow()
             await session.commit()
-            await message.answer(f"Готово! Вы добавлены как **{inv.role}**.", parse_mode="Markdown")
+            await message.answer(
+                f"Готово! Вы добавлены как **{inv.role}**.",
+                parse_mode="Markdown",
+            )
         else:
             await message.answer("Приглашение недействительно или истекло.")
     await _render_menu(message, state, session)
 
 
 @router.callback_query(F.data == "menu:root")
-async def back_to_menu(callback: CallbackQuery, state: FSMContext) -> None:
+async def back_to_menu(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
     # UX: keep Telegram "loading" animation on the pressed button.
     # We'll answer the callback after UI is rendered.
     await state.clear()
+    allowed, missing, _ = await _check_gate(
+        bot=callback.message.bot,
+        session=session,
+        user_id=callback.from_user.id,
+    )
+    if not allowed:
+        try:
+            await callback.message.edit_text(
+                gate_text(missing), reply_markup=gate_keyboard(missing)
+            )
+        except Exception:
+            await callback.message.answer(
+                gate_text(missing), reply_markup=gate_keyboard(missing)
+            )
+        try:
+            await callback.answer()
+        except Exception:
+            pass
+        return
     # UX: avoid chat spam. Prefer re-rendering menu in the same message.
     try:
-        await callback.message.edit_text(msg("welcome"), reply_markup=services_keyboard())
+        await callback.message.edit_text(
+            msg("welcome"), reply_markup=services_keyboard()
+        )
         try:
             await callback.answer()
         except Exception:
@@ -127,7 +284,9 @@ async def back_to_menu(callback: CallbackQuery, state: FSMContext) -> None:
     except Exception:
         pass
     try:
-        await callback.message.bot.send_message(chat_id, msg("welcome"), reply_markup=services_keyboard())
+        await callback.message.bot.send_message(
+            chat_id, msg("welcome"), reply_markup=services_keyboard()
+        )
     except Exception:
         pass
     try:
@@ -137,15 +296,108 @@ async def back_to_menu(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.callback_query(F.data == "menu:new")
-async def open_menu_new_message(callback: CallbackQuery) -> None:
+async def open_menu_new_message(
+    callback: CallbackQuery, session: AsyncSession
+) -> None:
     """Open menu without editing/deleting the current message (keeps important info in history)."""
     # UX: keep Telegram "loading" animation on the pressed button.
     # We'll answer the callback after UI is rendered.
-    await callback.message.answer(msg("welcome"), reply_markup=services_keyboard())
+    allowed, missing, _ = await _check_gate(
+        bot=callback.message.bot,
+        session=session,
+        user_id=callback.from_user.id,
+    )
+    if not allowed:
+        await callback.message.answer(
+            gate_text(missing), reply_markup=gate_keyboard(missing)
+        )
+    else:
+        requested = await _maybe_request_contact(callback.message, session)
+        if not requested:
+            await callback.message.answer(
+                msg("welcome"), reply_markup=services_keyboard()
+            )
     try:
         await callback.answer()
     except Exception:
         pass
+
+
+@router.callback_query(F.data == "gate:check")
+async def gate_check(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    await state.clear()
+    allowed, missing, _ = await _check_gate(
+        bot=callback.message.bot,
+        session=session,
+        user_id=callback.from_user.id,
+    )
+    if not allowed:
+        try:
+            await callback.message.edit_text(
+                gate_text(missing), reply_markup=gate_keyboard(missing)
+            )
+        except Exception:
+            await callback.message.answer(
+                gate_text(missing), reply_markup=gate_keyboard(missing)
+            )
+        try:
+            await callback.answer(
+                "Подписки не найдены. Проверьте ещё раз.", cache_time=1
+            )
+        except Exception:
+            pass
+        return
+
+    # Access ok — ask contact (optional) or show menu
+    requested = await _maybe_request_contact(callback.message, session)
+    if requested:
+        try:
+            await callback.answer("Доступ подтверждён ✅", cache_time=1)
+        except Exception:
+            pass
+        return
+    try:
+        await callback.message.edit_text(
+            msg("welcome"), reply_markup=services_keyboard()
+        )
+    except Exception:
+        await callback.message.answer(
+            msg("welcome"), reply_markup=services_keyboard()
+        )
+    try:
+        await callback.answer("Доступ подтверждён ✅", cache_time=1)
+    except Exception:
+        pass
+
+
+@router.message(F.contact)
+async def on_contact_shared(
+    message: Message, state: FSMContext, session: AsyncSession
+) -> None:
+    # Save contact to user profile
+    contact = message.contact
+    phone = getattr(contact, "phone_number", None) or ""
+    phone = phone.strip()
+    if phone:
+        await UserMemory.update_user_data(
+            session,
+            message.from_user.id,
+            phone=phone,
+            full_name=message.from_user.full_name,
+        )
+    # Hide reply keyboard and show menu
+    await message.answer("Спасибо! ✅", reply_markup=ReplyKeyboardRemove())
+    await _render_menu(message, state, session)
+
+
+@router.message(F.text == "Пропустить")
+async def skip_contact(
+    message: Message, state: FSMContext, session: AsyncSession
+) -> None:
+    await message.answer("Ок.", reply_markup=ReplyKeyboardRemove())
+    await _render_menu(message, state, session)
 
 
 @router.callback_query(F.data.startswith("entry:new:"))
@@ -160,5 +412,3 @@ async def open_entry_new_message(callback: CallbackQuery) -> None:
         await callback.answer()
     except Exception:
         pass
-
-

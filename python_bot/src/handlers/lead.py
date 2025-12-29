@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import re
+from datetime import datetime, timedelta
 from typing import Optional, Tuple
 
 from aiogram import F, Router
@@ -373,7 +375,44 @@ async def _submit_lead(
     inn: str | None,
     summary_text: str,
     meeting_window: str,
-) -> None:
+) -> bool:
+    # Dedupe: prevent duplicate Bitrix leads and staff spam on repeated submissions.
+    # Key is stable for the same lead payload.
+    norm = "|".join(
+        [
+            str(user_id),
+            (service_key or "").strip(),
+            (phone or "").strip(),
+            (inn or "").strip(),
+            (meeting_window or "").strip(),
+            (summary_text or "").strip(),
+        ]
+    )
+    dedupe_key = hashlib.sha1(norm.encode("utf-8")).hexdigest()[:64]
+    try:
+        cutoff = datetime.utcnow() - timedelta(hours=12)
+        existing = (
+            await session.execute(
+                select(LeadTicket).where(
+                    LeadTicket.dedupe_key == dedupe_key,
+                    LeadTicket.created_at >= cutoff,
+                )
+            )
+        ).scalar_one_or_none()
+    except Exception:
+        existing = None
+    if existing:
+        await log_event(
+            session,
+            user_id=user_id,
+            chat_id=chat_id,
+            username=username,
+            event="lead_deduped",
+            service_key=service_key,
+            meta={"ticket_id": int(existing.id)},
+        )
+        return False
+
     comment_parts = []
     if inn:
         comment_parts.append(f"ИНН: {inn}")
@@ -445,6 +484,7 @@ async def _submit_lead(
         lead_inn=inn,
         meeting_window=meeting_window,
         summary_text=summary_text,
+        dedupe_key=dedupe_key,
         status="new",
         assigned_to_tg_user_id=None,
         chat_enabled=0,
@@ -502,6 +542,7 @@ async def _submit_lead(
                 )
             except Exception:
                 continue
+    return True
 
 
 @router.message(LeadForm.waiting_for_meeting_window)
@@ -552,7 +593,7 @@ async def lead_process_meeting_window(
         service_key=service_key,
         meta={"value": meeting_window},
     )
-    await _submit_lead(
+    created = await _submit_lead(
         session=session,
         bot=message.bot,
         user_id=user_id,
@@ -569,7 +610,7 @@ async def lead_process_meeting_window(
         bot=message.bot,
         state=state,
         chat_id=message.chat.id,
-        text=msg("lead_received"),
+        text=msg("lead_received") if created else "Заявка уже принята ✅\n\nМенеджер свяжется с вами в рабочее время.",
         reply_markup=services_keyboard(),
         parse_mode=None,
         delete_transient=False,
@@ -638,7 +679,7 @@ async def lead_meeting_window_pick(
         meta={"value": meeting_window},
     )
 
-    await _submit_lead(
+    created = await _submit_lead(
         session=session,
         bot=callback.message.bot,
         user_id=user_id,
@@ -656,7 +697,7 @@ async def lead_meeting_window_pick(
         bot=callback.message.bot,
         state=state,
         chat_id=callback.message.chat.id,
-        text=msg("lead_received"),
+        text=msg("lead_received") if created else "Заявка уже принята ✅\n\nМенеджер свяжется с вами в рабочее время.",
         reply_markup=services_keyboard(),
         parse_mode=None,
         delete_transient=False,

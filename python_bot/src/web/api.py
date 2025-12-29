@@ -20,7 +20,10 @@ from src.models.user_memory import UserMemory
 from src.models.staff import StaffMember
 from src.models.staff_invite import StaffInvite
 from src.models.bot_heartbeat import BotHeartbeat
+from src.models.required_subscription import RequiredSubscription
+from src.models.app_setting import AppSetting
 from src.utils.webapp_url import get_webapp_public_url
+from src.utils.telegram_links import parse_tme_url
 from src.web.auth import (
     SESSION_KEY,
     require_auth,
@@ -40,6 +43,17 @@ class StaffUpsertRequest(BaseModel):
 class StaffInviteCreateRequest(BaseModel):
     role: str  # admin | manager
     ttl_hours: int = 168  # 7 days
+
+
+class RequiredSubscriptionCreateRequest(BaseModel):
+    kind: str = "channel"  # channel|group|other
+    chat_ref: str
+    title: Optional[str] = None
+    url: Optional[str] = None
+
+
+class ToggleRequest(BaseModel):
+    enabled: bool
 
 
 def _parse_date(raw: Optional[str]) -> Optional[date]:
@@ -266,6 +280,108 @@ def register_api(app: FastAPI) -> None:
         _: None = Depends(require_auth),
     ) -> Dict[str, Any]:
         return {"url": get_webapp_public_url(settings.webapp_public_url)}
+
+    # ============================================================
+    # Virality / access gate settings
+    # ============================================================
+
+    @app.get("/api/virality")
+    async def get_virality(
+        request: Request,
+        session: AsyncSession = Depends(_get_session),
+        _: None = Depends(require_auth),
+    ) -> Dict[str, Any]:
+        items = await RequiredSubscription.list_all(session)
+        ask_contact_raw = await AppSetting.get(session, "ask_contact_on_start")
+        ask_contact = (ask_contact_raw or "").strip().lower() in {"1", "true", "yes", "on"}
+        return {
+            "items": [
+                {
+                    "id": int(i.id),
+                    "kind": i.kind,
+                    "chat_ref": i.chat_ref,
+                    "title": i.title,
+                    "url": i.url,
+                }
+                for i in items
+            ],
+            "ask_contact_on_start": ask_contact,
+            "enabled": bool(items),
+        }
+
+    @app.post("/api/virality/subscriptions")
+    async def add_required_subscription(
+        payload: RequiredSubscriptionCreateRequest,
+        request: Request,
+        session: AsyncSession = Depends(_get_session),
+        _: None = Depends(require_auth),
+    ) -> Dict[str, Any]:
+        raw_chat_ref = (payload.chat_ref or "").strip()
+        kind = (payload.kind or "channel").strip().lower()
+        if kind not in {"channel", "group", "other"}:
+            kind = "other"
+        title = (payload.title or "").strip() or None
+        url = (payload.url or "").strip() or None
+
+        # Allow pasting https://t.me/... into chat_ref (or url) and normalize.
+        # If it's a public @username link, we can verify via getChatMember.
+        # If it's an invite link, we can only show the URL (verification is skipped on bot side).
+        chat_ref = raw_chat_ref
+        tme = parse_tme_url(raw_chat_ref) or (parse_tme_url(url or "") if url else None)
+        if tme:
+            if not url:
+                url = tme.url
+            if tme.username:
+                chat_ref = f"@{tme.username}"
+            else:
+                # unverifiable; store the URL in chat_ref as well (bot will treat as "open-only")
+                chat_ref = tme.url
+
+        if not chat_ref:
+            raise HTTPException(status_code=400, detail="chat_ref is required")
+
+        # Deduplicate: same kind + same chat_ref
+        try:
+            existing = (
+                await session.execute(
+                    select(RequiredSubscription).where(
+                        RequiredSubscription.kind == kind,
+                        RequiredSubscription.chat_ref == chat_ref,
+                    )
+                )
+            ).scalar_one_or_none()
+        except Exception:
+            existing = None
+        if existing:
+            return {"success": True, "id": int(existing.id), "deduped": True}
+
+        item = RequiredSubscription(kind=kind, chat_ref=chat_ref, title=title, url=url)
+        session.add(item)
+        await session.commit()
+        await session.refresh(item)
+        return {"success": True, "id": int(item.id)}
+
+    @app.delete("/api/virality/subscriptions/{item_id}")
+    async def delete_required_subscription(
+        item_id: int,
+        request: Request,
+        session: AsyncSession = Depends(_get_session),
+        _: None = Depends(require_auth),
+    ) -> Dict[str, Any]:
+        ok = await RequiredSubscription.delete_by_id(session, int(item_id))
+        await session.commit()
+        return {"success": bool(ok)}
+
+    @app.post("/api/virality/ask-contact")
+    async def set_ask_contact(
+        payload: ToggleRequest,
+        request: Request,
+        session: AsyncSession = Depends(_get_session),
+        _: None = Depends(require_auth),
+    ) -> Dict[str, Any]:
+        await AppSetting.set(session, "ask_contact_on_start", "1" if payload.enabled else "0")
+        await session.commit()
+        return {"success": True, "enabled": bool(payload.enabled)}
 
     def _parse_event(message_text: str) -> Optional[Dict[str, Any]]:
         if not message_text or not message_text.startswith("event:"):

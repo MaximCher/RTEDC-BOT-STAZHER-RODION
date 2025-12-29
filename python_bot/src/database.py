@@ -94,15 +94,27 @@ async def init_db() -> None:
         # Soft-migrations (keep production stable without Alembic for now)
         # Staff profile fields (show names instead of IDs in admin panel)
         try:
-            await conn.execute(text("ALTER TABLE staff ADD COLUMN IF NOT EXISTS tg_username VARCHAR(255)"))
+            await conn.execute(
+                text(
+                    "ALTER TABLE staff ADD COLUMN IF NOT EXISTS tg_username VARCHAR(255)"
+                )
+            )
         except Exception:
             pass
         try:
-            await conn.execute(text("ALTER TABLE staff ADD COLUMN IF NOT EXISTS tg_full_name TEXT"))
+            await conn.execute(
+                text(
+                    "ALTER TABLE staff ADD COLUMN IF NOT EXISTS tg_full_name TEXT"
+                )
+            )
         except Exception:
             pass
         try:
-            await conn.execute(text("ALTER TABLE staff ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMP"))
+            await conn.execute(
+                text(
+                    "ALTER TABLE staff ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMP"
+                )
+            )
         except Exception:
             pass
         # Hotfix: bot_id for bot_heartbeat must be bigint
@@ -118,12 +130,68 @@ async def init_db() -> None:
             pass
         # Lead/CRM additions: store INN (tax id) without breaking existing DB
         try:
-            await conn.execute(text("ALTER TABLE user_memory ADD COLUMN IF NOT EXISTS inn TEXT"))
+            await conn.execute(
+                text(
+                    "ALTER TABLE user_memory ADD COLUMN IF NOT EXISTS inn TEXT"
+                )
+            )
         except Exception:
             pass
         try:
             await conn.execute(
-                text("ALTER TABLE lead_tickets ADD COLUMN IF NOT EXISTS lead_inn VARCHAR(16)")
+                text(
+                    "ALTER TABLE lead_tickets ADD COLUMN IF NOT EXISTS lead_inn VARCHAR(16)"
+                )
+            )
+        except Exception:
+            pass
+        # Lead deduplication: avoid duplicate Bitrix leads and staff spam
+        try:
+            await conn.execute(
+                text(
+                    "ALTER TABLE lead_tickets ADD COLUMN IF NOT EXISTS dedupe_key VARCHAR(64)"
+                )
+            )
+        except Exception:
+            pass
+        try:
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_lead_tickets_dedupe_key "
+                    "ON lead_tickets(dedupe_key)"
+                )
+            )
+        except Exception:
+            pass
+        # Virality / gating settings
+        try:
+            await conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS required_subscriptions (
+                      id SERIAL PRIMARY KEY,
+                      kind TEXT DEFAULT 'channel',
+                      chat_ref TEXT NOT NULL,
+                      title TEXT,
+                      url TEXT,
+                      created_at TIMESTAMP DEFAULT NOW()
+                    )
+                    """
+                )
+            )
+        except Exception:
+            pass
+        try:
+            await conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS app_settings (
+                      key TEXT PRIMARY KEY,
+                      value TEXT,
+                      updated_at TIMESTAMP DEFAULT NOW()
+                    )
+                    """
+                )
             )
         except Exception:
             pass

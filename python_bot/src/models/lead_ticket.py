@@ -30,6 +30,7 @@ class LeadTicket(Base):
     lead_inn: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     meeting_window: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
     summary_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    dedupe_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
 
     status: Mapped[str] = mapped_column(String(20), default="new", index=True)  # new|open|closed
     assigned_to_tg_user_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True, index=True)

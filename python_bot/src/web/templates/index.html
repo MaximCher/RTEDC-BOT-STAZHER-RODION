@@ -204,6 +204,79 @@
               </div>
             </div>
 
+            <!-- Virality / Access gate -->
+            <div class="card mb-3">
+              <div class="card-header">
+                <div>
+                  <div class="card-title">Доступ / виральность (обязательные подписки)</div>
+                  <div class="text-secondary">
+                    Если список пуст — бот никого не проверяет. Добавьте каналы/группы, чтобы перед входом просить
+                    подписку. Можно просто вставлять ссылки Telegram — бот сам разберётся.
+                  </div>
+                </div>
+              </div>
+              <div class="card-body">
+                <div class="row g-2">
+                  <div class="col-12 col-md-2">
+                    <label class="form-label">Тип</label>
+                    <select id="virality-kind" class="form-select">
+                      <option value="channel">Канал</option>
+                      <option value="group">Группа</option>
+                      <option value="other">Другое</option>
+                    </select>
+                  </div>
+                  <div class="col-12 col-md-4">
+                    <label class="form-label">Что добавить</label>
+                    <input
+                      id="virality-chat-ref"
+                      type="text"
+                      class="form-control"
+                      placeholder="Вставьте https://t.me/... или @username или -100..."
+                    />
+                    <div class="form-hint">
+                      Примеры: <code>https://t.me/srvt_news</code>, <code>@srvt_news</code>, <code>-1001234567890</code>
+                    </div>
+                  </div>
+                  <div class="col-12 col-md-3">
+                    <label class="form-label">Название (опц.)</label>
+                    <input
+                      id="virality-title"
+                      type="text"
+                      class="form-control"
+                      placeholder="Например: Новости SRVT"
+                    />
+                  </div>
+                  <div class="col-12 col-md-3">
+                    <label class="form-label">Ссылка “Открыть” (опц.)</label>
+                    <input
+                      id="virality-url"
+                      type="text"
+                      class="form-control"
+                      placeholder="https://t.me/..."
+                    />
+                    <div class="form-hint">
+                      Если вставите инвайт вида <code>https://t.me/+...</code>, бот сможет дать кнопку “Открыть”, но
+                      проверить подписку автоматически не сможет.
+                    </div>
+                  </div>
+                  <div class="col-12 col-md-3">
+                    <button class="btn btn-primary w-100" onclick="addViralitySub()">
+                      Добавить
+                    </button>
+                  </div>
+                  <div class="col-12 col-md-9 d-flex align-items-center">
+                    <label class="form-check form-switch m-0">
+                      <input class="form-check-input" type="checkbox" id="ask-contact-toggle" onchange="saveAskContact()" />
+                      <span class="form-check-label">После проверки подписок попросить контакт (кнопка “Поделиться контактом”)</span>
+                    </label>
+                  </div>
+                </div>
+                <div class="mt-3">
+                  <div id="virality-list" class="vstack gap-2"></div>
+                </div>
+              </div>
+            </div>
+
             <!-- Users + Dialog -->
             <div class="row g-3">
               <div class="col-12 col-lg-4">

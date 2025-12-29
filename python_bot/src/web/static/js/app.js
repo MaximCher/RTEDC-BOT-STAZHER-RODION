@@ -159,7 +159,91 @@ async function reloadAll() {
     loadFunnel(),
     loadUsers(),
     loadStaff(),
+    loadVirality(),
   ]);
+}
+
+async function loadVirality() {
+  const container = qs("virality-list");
+  if (!container) return;
+  try {
+    const data = await api(`/api/virality`);
+    const items = data.items || [];
+    const toggle = qs("ask-contact-toggle");
+    if (toggle) toggle.checked = Boolean(data.ask_contact_on_start);
+
+    if (!items.length) {
+      container.innerHTML = `<div class="text-secondary">Список пуст — проверка отключена.</div>`;
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="list-group">
+        ${items
+          .map((it) => {
+            const title = it.title ? String(it.title) : "";
+            const chatRef = String(it.chat_ref || "");
+            const kind = String(it.kind || "other");
+            const url = it.url ? String(it.url) : "";
+            const label = [title || chatRef, kind].filter(Boolean).join(" · ");
+            const link = url
+              ? `<a class="small" href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(url)}</a>`
+              : `<span class="text-secondary small">url: —</span>`;
+            return `
+              <div class="list-group-item">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                  <div>
+                    <div class="fw-bold">${escapeHtml(label)}</div>
+                    <div class="text-secondary small">chat_ref: ${escapeHtml(chatRef)}</div>
+                    <div class="mt-1">${link}</div>
+                  </div>
+                  <div class="text-end">
+                    <button class="btn btn-sm btn-outline-danger" onclick="removeViralitySub(${Number(
+                      it.id
+                    )}); return false;">Удалить</button>
+                  </div>
+                </div>
+              </div>
+            `;
+          })
+          .join("")}
+      </div>
+    `;
+  } catch (e) {
+    container.innerHTML = `<div class="text-danger small">Не удалось загрузить настройки.</div>`;
+  }
+}
+
+async function addViralitySub() {
+  const kind = (qs("virality-kind")?.value || "channel").trim();
+  const chatRef = (qs("virality-chat-ref")?.value || "").trim();
+  const title = (qs("virality-title")?.value || "").trim();
+  const url = (qs("virality-url")?.value || "").trim();
+  if (!chatRef) {
+    alert("Вставьте ссылку https://t.me/... или @username или -100...");
+    return;
+  }
+  await api(`/api/virality/subscriptions`, {
+    method: "POST",
+    body: JSON.stringify({ kind, chat_ref: chatRef, title: title || null, url: url || null }),
+  });
+  qs("virality-chat-ref").value = "";
+  qs("virality-title").value = "";
+  qs("virality-url").value = "";
+  await loadVirality();
+}
+
+async function removeViralitySub(id) {
+  await api(`/api/virality/subscriptions/${id}`, { method: "DELETE" });
+  await loadVirality();
+}
+
+async function saveAskContact() {
+  const enabled = Boolean(qs("ask-contact-toggle")?.checked);
+  await api(`/api/virality/ask-contact`, {
+    method: "POST",
+    body: JSON.stringify({ enabled }),
+  });
 }
 
 async function loadWebappUrl() {
