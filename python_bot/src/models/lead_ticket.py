@@ -27,6 +27,7 @@ class LeadTicket(Base):
     lead_full_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     lead_phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     lead_username: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    lead_inn: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     meeting_window: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
     summary_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 

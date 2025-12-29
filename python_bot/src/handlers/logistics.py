@@ -201,7 +201,7 @@ async def handle_logistics_quote_answer(message: Message, state: FSMContext, ses
     summary_lines = ["SRVT • Расчёт логистики (pre-quote)"]
     for k, q in _LOG_QUESTIONS:
         summary_lines.append(f"{q}\nОтвет: {answers.get(k, '')}")
-    summary_lines.append("SRVT обещание: персональный менеджер свяжется в течение 15 минут (в рабочее время).")
+    summary_lines.append("SRVT обещание: персональный менеджер свяжется в ближайшее время (в рабочее время).")
     summary_text = "\n\n".join(summary_lines)
 
     await log_event(
@@ -223,6 +223,10 @@ async def handle_logistics_quote_answer(message: Message, state: FSMContext, ses
         text=result,
         reply_markup=lead_actions_keyboard(service_key),
         parse_mode=None,
+        persist=True,
+        session=session,
+        user_id=message.from_user.id,
+        username=message.from_user.username,
     )
 
 

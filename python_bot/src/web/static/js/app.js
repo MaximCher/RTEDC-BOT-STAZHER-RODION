@@ -34,7 +34,7 @@ const SERVICE_LABELS = {
 
 const FUNNEL_STEP_LABELS = {
   entry_service: "1) Вошли в услугу",
-  engagement_start: "2) Старт квиза/калькулятора/анкеты",
+  engagement_start: "2) Старт квиза/калькулятора/заявки",
   engagement_complete: "3) Дошли до результата",
   cta_lead_start: "4) Нажали «Оставить заявку»",
   contact_submitted: "5) Оставили контакт",
@@ -319,7 +319,7 @@ async function loadFunnel() {
             <table class="table table-vcenter table-sm">
               <tbody>
                 <tr><td class="text-secondary">1) Вошли в услугу</td><td class="text-end fw-bold">${counts.entry_service || 0}</td></tr>
-                <tr><td class="text-secondary">2) Старт квиза/калькулятора/анкеты</td><td class="text-end fw-bold">${counts.engagement_start || 0}</td></tr>
+                <tr><td class="text-secondary">2) Старт квиза/калькулятора/заявки</td><td class="text-end fw-bold">${counts.engagement_start || 0}</td></tr>
                 <tr><td class="text-secondary">3) Дошли до результата</td><td class="text-end fw-bold">${counts.engagement_complete || 0}</td></tr>
                 <tr><td class="text-secondary">4) Нажали «Оставить заявку»</td><td class="text-end fw-bold">${counts.cta_lead_start || 0}</td></tr>
                 <tr><td class="text-secondary">5) Оставили контакт</td><td class="text-end fw-bold">${counts.contact_submitted || 0}</td></tr>
@@ -726,13 +726,9 @@ async function openConversation(userId) {
             ? "Система"
             : role === "staff"
               ? "Менеджер"
-              : role === "event"
-                ? "Событие"
-                : "Пользователь";
+              : "Пользователь";
       const rawText = String(m.message_text || "");
-      const eventHtml =
-        role === "event" || rawText.startsWith("event:") ? formatEventMessage(rawText) : null;
-      const bodyHtml = eventHtml ? eventHtml : escapeHtml(rawText);
+      const bodyHtml = escapeHtml(rawText);
       return `
         <div class="msg ${role}">
           <div class="head">

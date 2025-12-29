@@ -127,7 +127,7 @@ def register_api(app: FastAPI) -> None:
             func.max(DialogMessage.phone).label("phone"),
             func.count(DialogMessage.id).label("message_count"),
             func.max(DialogMessage.created_at).label("last_message_at"),
-        ).group_by(DialogMessage.user_id)
+        ).where(DialogMessage.role != "event").group_by(DialogMessage.user_id)
 
         if start_dt is not None:
             q = q.where(DialogMessage.created_at >= start_dt)
@@ -167,6 +167,7 @@ def register_api(app: FastAPI) -> None:
         q = (
             select(DialogMessage)
             .where(DialogMessage.user_id == user_id)
+            .where(DialogMessage.role != "event")
             .order_by(DialogMessage.created_at.desc())
             .limit(limit)
         )

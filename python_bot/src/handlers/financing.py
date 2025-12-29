@@ -7,16 +7,18 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
-from src.services.finance_calc import estimate_refinance, parse_percent, parse_term_months
+from src.services.finance_calc import (
+    estimate_refinance,
+    parse_percent,
+    parse_term_months,
+)
 from src.services.subsidy_calc import parse_money_rub
 from src.utils.funnel import log_event
 from src.utils.keyboards import flow_nav_keyboard, lead_actions_keyboard
-from src.utils.ui_flow import format_step, ui_upsert, ui_send_persistent
 from src.utils.service_entry import entry_screen_for_service
-
+from src.utils.ui_flow import format_step, ui_send_persistent, ui_upsert
 
 router = Router()
 
@@ -26,13 +28,20 @@ class FinanceCalc(StatesGroup):
 
 
 _FIN_QUESTIONS: List[Tuple[str, str]] = [
-    ("goal", "1) Что нужно: новый кредит или рефинанс? (напишите: новый / рефинанс)"),
+    (
+        "goal",
+        "1) Что нужно: новый кредит или рефинанс? (напишите: новый / рефинанс)",
+    ),
     ("amount", "2) Сумма (если рефинанс — остаток долга). Пример: «25 млн ₽»"),
-    ("rate", "3) Текущая ставка (% годовых). Если не знаете — напишите «не знаю»"),
-    ("term", "4) Срок (если рефинанс — остаток; если новый — желаемый). Пример: «36 мес» или «3 года»"),
-    ("banks", "5) Сколько кредитных линий и в каких банках? (кратко, можно «не знаю»)"),
-    ("company", "6) Форма (ООО/ИП) + отрасль (1 фраза)"),
-    ("urgency", "7) Когда нужно решение? (сейчас/в течение месяца/позже)"),
+    (
+        "rate",
+        "3) Текущая ставка (% годовых). Если не знаете — напишите «не знаю»",
+    ),
+    (
+        "term",
+        "4) Срок (если рефинанс — остаток; если новый — желаемый). Пример: «36 мес» или «3 года»",
+    ),
+    ("company", "5) Форма (ООО/ИП) + отрасль (1 фраза)"),
 ]
 
 
@@ -47,7 +56,9 @@ def _first_money(text: str) -> Optional[int]:
 
 
 @router.callback_query(F.data == "finance:calc:back")
-async def finance_calc_back(callback: CallbackQuery, state: FSMContext) -> None:
+async def finance_calc_back(
+    callback: CallbackQuery, state: FSMContext
+) -> None:
     # Back within finance calc flow
     current = await state.get_state()
     if current != FinanceCalc.waiting_for_answer.state:
@@ -57,7 +68,11 @@ async def finance_calc_back(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
     step = int(data.get("fin_step", 0))
     answers: Dict[str, str] = dict(data.get("fin_answers") or {})
-    service_key = data.get("service_key") if isinstance(data.get("service_key"), str) else "subsidies_financing"
+    service_key = (
+        data.get("service_key")
+        if isinstance(data.get("service_key"), str)
+        else "subsidies_financing"
+    )
 
     if step <= 0:
         await state.clear()
@@ -98,13 +113,19 @@ async def finance_calc_back(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.callback_query(F.data.startswith("finance:calc:start:"))
-async def start_finance_calc(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
-    service_key = (callback.data or "").split("finance:calc:start:", 1)[-1].strip()
+async def start_finance_calc(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    service_key = (
+        (callback.data or "").split("finance:calc:start:", 1)[-1].strip()
+    )
     if not service_key:
         service_key = "subsidies_financing"
 
     await state.set_state(FinanceCalc.waiting_for_answer)
-    await state.update_data(service_key=service_key, fin_step=0, fin_answers={})
+    await state.update_data(
+        service_key=service_key, fin_step=0, fin_answers={}
+    )
 
     await log_event(
         session,
@@ -135,7 +156,9 @@ async def start_finance_calc(callback: CallbackQuery, state: FSMContext, session
 
 
 @router.message(FinanceCalc.waiting_for_answer)
-async def handle_finance_calc_answer(message: Message, state: FSMContext, session: AsyncSession) -> None:
+async def handle_finance_calc_answer(
+    message: Message, state: FSMContext, session: AsyncSession
+) -> None:
     user_id = message.from_user.id
     text = (message.text or "").strip()
     if not text:
@@ -169,7 +192,12 @@ async def handle_finance_calc_answer(message: Message, state: FSMContext, sessio
                 keep_at_bottom=True,
             )
             return
-    if key == "rate" and text.lower() not in {"не знаю", "незнаю", "не знаю.", "нет"}:
+    if key == "rate" and text.lower() not in {
+        "не знаю",
+        "незнаю",
+        "не знаю.",
+        "нет",
+    }:
         if parse_percent(text) is None:
             await ui_upsert(
                 bot=message.bot,
@@ -207,7 +235,9 @@ async def handle_finance_calc_answer(message: Message, state: FSMContext, sessio
     answers[key] = text[:500]
 
     # Persist user answer for traceability
-    await UserMemory.add_message(session, user_id, "user", f"{q_text}\nОтвет: {text}")
+    await UserMemory.add_message(
+        session, user_id, "user", f"{q_text}\nОтвет: {text}"
+    )
     await DialogMessage.create(
         session,
         user_id=user_id,
@@ -242,14 +272,22 @@ async def handle_finance_calc_answer(message: Message, state: FSMContext, sessio
     # Compute estimate (refi-focused, but still useful for new credit as "next steps")
     goal = answers.get("goal", "")
     principal = _first_money(answers.get("amount", "")) or 0
-    rate = parse_percent(answers.get("rate", "")) if answers.get("rate") else None
-    term = parse_term_months(answers.get("term", "")) if answers.get("term") else None
+    rate = (
+        parse_percent(answers.get("rate", "")) if answers.get("rate") else None
+    )
+    term = (
+        parse_term_months(answers.get("term", ""))
+        if answers.get("term")
+        else None
+    )
 
     is_refi = _goal_is_refi(goal)
     estimate_text = ""
 
     if is_refi:
-        est = estimate_refinance(principal_rub=principal, current_rate=rate, term_months=term)
+        est = estimate_refinance(
+            principal_rub=principal, current_rate=rate, term_months=term
+        )
         if est.savings_range_rub_per_year:
             lo, hi = est.savings_range_rub_per_year
             estimate_text = (
@@ -269,7 +307,9 @@ async def handle_finance_calc_answer(message: Message, state: FSMContext, sessio
     for k, q in _FIN_QUESTIONS:
         summary_lines.append(f"{q}\nОтвет: {answers.get(k, '')}")
     summary_lines.append(estimate_text)
-    summary_lines.append("SRVT обещание: предварительное решение по заявке в течение дня (в рабочее время).")
+    summary_lines.append(
+        "SRVT обещание: предварительное решение по заявке в течение дня (в рабочее время)."
+    )
     summary_text = "\n\n".join(summary_lines)
 
     await log_event(
@@ -296,6 +336,8 @@ async def handle_finance_calc_answer(message: Message, state: FSMContext, sessio
         text=estimate_text,
         reply_markup=lead_actions_keyboard("subsidies_financing"),
         parse_mode=None,
+        persist=True,
+        session=session,
+        user_id=user_id,
+        username=message.from_user.username,
     )
-
-

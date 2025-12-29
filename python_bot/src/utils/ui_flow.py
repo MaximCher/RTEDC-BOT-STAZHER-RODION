@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import html
+import re
 from typing import Optional
 
 from aiogram import Bot
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.models.dialog_message import DialogMessage
 
 UI_MESSAGE_ID_KEY = "_ui_message_id"
 UI_MODE_KEY = "_ui_mode"
@@ -127,6 +132,13 @@ async def ui_send_persistent(
     reply_markup: Optional[InlineKeyboardMarkup] = None,
     parse_mode: str | None = "HTML",
     delete_transient: bool = True,
+    # Optional: persist message to admin "conversation" history (DialogMessage)
+    persist: bool = False,
+    session: Optional[AsyncSession] = None,
+    user_id: Optional[int] = None,
+    username: Optional[str] = None,
+    full_name: Optional[str] = None,
+    phone: Optional[str] = None,
 ) -> None:
     """
     Send an important message that should remain in chat history (not edited/deleted later).
@@ -139,7 +151,33 @@ async def ui_send_persistent(
             await bot.delete_message(chat_id=chat_id, message_id=msg_id)
         except Exception:
             pass
-    await bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup, parse_mode=parse_mode)
+    sent = await bot.send_message(
+        chat_id=chat_id,
+        text=text,
+        reply_markup=reply_markup,
+        parse_mode=parse_mode,
+    )
+
+    if persist and session is not None and isinstance(user_id, int) and user_id > 0:
+        # Admin UI renders plain text. If we sent HTML, store a readable version.
+        raw = text or ""
+        # naive, but good enough for our limited markup usage (<b>, <i>, etc.)
+        raw = re.sub(r"<[^>]+>", "", raw)
+        raw = html.unescape(raw).strip()
+        try:
+            await DialogMessage.create(
+                session,
+                user_id=user_id,
+                username=username,
+                full_name=full_name,
+                phone=phone,
+                message_text=raw,
+                role="assistant",
+                chat_id=chat_id,
+                message_id=int(sent.message_id),
+            )
+        except Exception:
+            pass
     # Clear transient tracking so future UI updates won't target the persistent message.
     await state.update_data(**{UI_MESSAGE_ID_KEY: 0, UI_MODE_KEY: "persistent"})
 

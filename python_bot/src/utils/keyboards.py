@@ -32,7 +32,7 @@ def flow_nav_keyboard(back_callback_data: str | None = None) -> InlineKeyboardMa
 def lead_actions_keyboard(service_key: str) -> InlineKeyboardMarkup:
     first_row = [
         InlineKeyboardButton(
-            text="📩 Оставить заявку",
+            text="📩 Заявка на консультацию",
             callback_data=f"lead:start:{service_key}",
         )
     ]
@@ -60,7 +60,7 @@ def subsidy_chat_keyboard(service_key: str) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="📩 Оставить заявку",
+                    text="📩 Заявка на консультацию",
                     callback_data=f"lead:start:{service_key}",
                 )
             ],
@@ -95,8 +95,8 @@ def subsidies_entry_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="📝 Заполнить анкету",
-                callback_data="service:questionnaire:subsidies_financing",
+                text="📩 Заявка на консультацию",
+                callback_data="lead:start:subsidies_financing",
             )
         ],
     ]
@@ -114,8 +114,8 @@ def payments_entry_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="📝 Заполнить анкету",
-                callback_data="service:questionnaire:international_payments",
+                text="📩 Заявка на консультацию",
+                callback_data="lead:start:international_payments",
             )
         ],
     ]
@@ -133,8 +133,8 @@ def logistics_entry_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="📝 Заполнить анкету",
-                callback_data="service:questionnaire:logistics_ved",
+                text="📩 Заявка на консультацию",
+                callback_data="lead:start:logistics_ved",
             )
         ],
     ]
@@ -152,8 +152,8 @@ def analytics_entry_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="📝 Заполнить анкету",
-                callback_data="service:questionnaire:analytics_tnved",
+                text="📩 Заявка на консультацию",
+                callback_data="lead:start:analytics_tnved",
             )
         ],
     ]
@@ -171,8 +171,8 @@ def quick_audit_entry_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="📝 Заполнить анкету",
-                callback_data="service:questionnaire:quick_audit_inn",
+                text="📩 Заявка на консультацию",
+                callback_data="lead:start:quick_audit_inn",
             )
         ],
     ]
@@ -190,8 +190,8 @@ def club_entry_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="📝 Заполнить анкету",
-                callback_data="service:questionnaire:club_partnership",
+                text="📩 Заявка на консультацию",
+                callback_data="lead:start:club_partnership",
             )
         ],
     ]

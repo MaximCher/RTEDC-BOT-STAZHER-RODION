@@ -7,14 +7,12 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
 from src.utils.funnel import log_event
 from src.utils.keyboards import flow_nav_keyboard, lead_actions_keyboard
-from src.utils.ui_flow import format_step, ui_upsert, ui_send_persistent
 from src.utils.service_entry import entry_screen_for_service
-
+from src.utils.ui_flow import format_step, ui_send_persistent, ui_upsert
 
 router = Router()
 
@@ -26,14 +24,22 @@ class AnalyticsReport(StatesGroup):
 _AN_QUESTIONS: List[Tuple[str, str]] = [
     ("countries", "1) Какие страны интересуют? (до 10, можно 1–2)"),
     ("product", "2) Товар/позиция: название или ТН ВЭД (если знаете)"),
-    ("report_type", "3) Отчёт: краткий или расширенный? (краткий/расширенный)"),
-    ("inn", "4) ИНН вашей компании (если есть). Если не хотите — напишите «нет»"),
+    (
+        "report_type",
+        "3) Отчёт: краткий или расширенный? (краткий/расширенный)",
+    ),
+    (
+        "inn",
+        "4) ИНН вашей компании (если есть). Если не хотите — напишите «нет»",
+    ),
     ("timeline", "5) Когда нужен результат? (сейчас/в течение недели/позже)"),
 ]
 
 
 @router.callback_query(F.data == "analytics:report:back")
-async def analytics_report_back(callback: CallbackQuery, state: FSMContext) -> None:
+async def analytics_report_back(
+    callback: CallbackQuery, state: FSMContext
+) -> None:
     current = await state.get_state()
     if current != AnalyticsReport.waiting_for_answer.state:
         await callback.answer()
@@ -42,7 +48,11 @@ async def analytics_report_back(callback: CallbackQuery, state: FSMContext) -> N
     data = await state.get_data()
     step = int(data.get("an_step", 0))
     answers: Dict[str, str] = dict(data.get("an_answers") or {})
-    service_key = data.get("service_key") if isinstance(data.get("service_key"), str) else "analytics_tnved"
+    service_key = (
+        data.get("service_key")
+        if isinstance(data.get("service_key"), str)
+        else "analytics_tnved"
+    )
 
     if step <= 0:
         await state.clear()
@@ -83,8 +93,12 @@ async def analytics_report_back(callback: CallbackQuery, state: FSMContext) -> N
 
 
 @router.callback_query(F.data.startswith("analytics:report:start:"))
-async def start_analytics_report(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
-    service_key = (callback.data or "").split("analytics:report:start:", 1)[-1].strip()
+async def start_analytics_report(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    service_key = (
+        (callback.data or "").split("analytics:report:start:", 1)[-1].strip()
+    )
     if not service_key:
         service_key = "analytics_tnved"
 
@@ -119,7 +133,9 @@ async def start_analytics_report(callback: CallbackQuery, state: FSMContext, ses
 
 
 @router.message(AnalyticsReport.waiting_for_answer)
-async def handle_analytics_report_answer(message: Message, state: FSMContext, session: AsyncSession) -> None:
+async def handle_analytics_report_answer(
+    message: Message, state: FSMContext, session: AsyncSession
+) -> None:
     text = (message.text or "").strip()
     if not text:
         return
@@ -127,7 +143,11 @@ async def handle_analytics_report_answer(message: Message, state: FSMContext, se
     data = await state.get_data()
     step = int(data.get("an_step", 0))
     answers: Dict[str, str] = dict(data.get("an_answers") or {})
-    service_key = data.get("service_key") if isinstance(data.get("service_key"), str) else "analytics_tnved"
+    service_key = (
+        data.get("service_key")
+        if isinstance(data.get("service_key"), str)
+        else "analytics_tnved"
+    )
 
     if step < 0 or step >= len(_AN_QUESTIONS):
         await state.clear()
@@ -136,7 +156,9 @@ async def handle_analytics_report_answer(message: Message, state: FSMContext, se
     key, q_text = _AN_QUESTIONS[step]
     answers[key] = text[:700]
 
-    await UserMemory.add_message(session, message.from_user.id, "user", f"{q_text}\nОтвет: {text}")
+    await UserMemory.add_message(
+        session, message.from_user.id, "user", f"{q_text}\nОтвет: {text}"
+    )
     await DialogMessage.create(
         session,
         user_id=message.from_user.id,
@@ -178,7 +200,9 @@ async def handle_analytics_report_answer(message: Message, state: FSMContext, se
     summary_lines = ["SRVT • Заказ аналитического отчёта (TN VED)"]
     for k, q in _AN_QUESTIONS:
         summary_lines.append(f"{q}\nОтвет: {answers.get(k, '')}")
-    summary_lines.append("SRVT обещание: персональный менеджер свяжется в течение 15 минут (в рабочее время).")
+    summary_lines.append(
+        "SRVT обещание: персональный менеджер свяжется в ближайшее время (в рабочее время)."
+    )
     summary_text = "\n\n".join(summary_lines)
 
     await log_event(
@@ -190,7 +214,9 @@ async def handle_analytics_report_answer(message: Message, state: FSMContext, se
         service_key=service_key,
     )
 
-    await UserMemory.add_message(session, message.from_user.id, "system", summary_text)
+    await UserMemory.add_message(
+        session, message.from_user.id, "system", summary_text
+    )
     await state.update_data(questionnaire_summary=summary_text)
 
     await ui_send_persistent(
@@ -200,6 +226,8 @@ async def handle_analytics_report_answer(message: Message, state: FSMContext, se
         text=result,
         reply_markup=lead_actions_keyboard(service_key),
         parse_mode=None,
+        persist=True,
+        session=session,
+        user_id=message.from_user.id,
+        username=message.from_user.username,
     )
-
-

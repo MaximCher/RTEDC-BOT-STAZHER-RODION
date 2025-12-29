@@ -45,15 +45,13 @@ class SubsidyCalc(StatesGroup):
 
 _SUBSIDY_CALC_QUESTIONS: List[Tuple[str, str]] = [
     ("region", "1) Регион регистрации/реализации проекта (город/область)"),
-    ("company_type", "2) Форма компании: ООО / ИП / самозанятый / пока нет"),
-    ("industry", "3) Отрасль/вид деятельности (1–2 фразы)"),
+    ("industry", "2) Отрасль/вид деятельности (1–2 фразы)"),
     (
         "spend_type",
-        "4) Что хотим компенсировать? (оборудование/логистика/сертификация/маркетинг/НИОКР/ФОТ/выставки/другое)",
+        "3) Что хотим компенсировать? (оборудование/логистика/сертификация/маркетинг/НИОКР/ФОТ/выставки/другое)",
     ),
-    ("budget", "5) Бюджет расходов/проекта (диапазон или сумма в ₽)"),
-    ("export", "6) Есть экспорт или план экспорта? (да/нет). Если да — страны"),
-    ("timeline", "7) Срок: когда актуально? (сейчас/в течение месяца/позже)"),
+    ("budget", "4) Бюджет расходов/проекта (диапазон или сумма в ₽)"),
+    ("export", "5) Есть экспорт или план экспорта? (да/нет). Если да — страны"),
 ]
 
 
@@ -273,7 +271,7 @@ async def handle_subsidy_calc_answer(message: Message, state: FSMContext, sessio
     result = (
         f"{result}\n\n"
         "Хотите точный расчёт под вашу ситуацию (программа/условия/пакет документов)?\n"
-        "Нажмите «📩 Оставить заявку» — персональный менеджер SRVT свяжется в течение 15 минут (в рабочее время) "
+        "Нажмите «📩 Оставить заявку» — персональный менеджер SRVT свяжется в ближайшее время (в рабочее время) "
         "и проведёт по шагам."
     )
     await ui_send_persistent(
@@ -283,6 +281,10 @@ async def handle_subsidy_calc_answer(message: Message, state: FSMContext, sessio
         text=result,
         reply_markup=lead_actions_keyboard("subsidies_financing"),
         parse_mode=None,
+        persist=True,
+        session=session,
+        user_id=user_id,
+        username=message.from_user.username,
     )
 
 
@@ -397,7 +399,7 @@ async def handle_subsidy_question(
         f"<b>Вопрос:</b> {text}\n\n"
         f"<b>Ответ:</b>\n{safe_answer}\n\n"
         "Если хотите — можно быстро проверить применимость и посчитать точнее под вашу компанию.\n"
-        "Нажмите «📩 Оставить заявку» — персональный менеджер SRVT свяжется в течение 15 минут (в рабочее время) "
+        "Нажмите «📩 Оставить заявку» — персональный менеджер SRVT свяжется в ближайшее время (в рабочее время) "
         "и предложит следующий шаг."
     )
     # Persist each answer in chat history
@@ -409,6 +411,10 @@ async def handle_subsidy_question(
         reply_markup=subsidy_chat_keyboard(service_key),
         parse_mode="HTML",
         delete_transient=False,
+        persist=True,
+        session=session,
+        user_id=user_id,
+        username=message.from_user.username,
     )
     # Re-render prompt at bottom (transient) so next question is always near the input
     await ui_upsert(

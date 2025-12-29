@@ -7,13 +7,12 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
 from src.utils.funnel import log_event
 from src.utils.keyboards import flow_nav_keyboard, lead_actions_keyboard
-from src.utils.ui_flow import format_step, ui_upsert, ui_send_persistent
 from src.utils.service_entry import entry_screen_for_service
+from src.utils.ui_flow import format_step, ui_send_persistent, ui_upsert
 
 router = Router()
 
@@ -23,14 +22,26 @@ class ClubApply(StatesGroup):
 
 
 _CLUB_QUESTIONS: List[Tuple[str, str]] = [
-    ("format", "1) Формат: партнёрство или агентская программа? (партнёр/агент)"),
+    (
+        "format",
+        "1) Формат: партнёрство или агентская программа? (партнёр/агент)",
+    ),
     (
         "sphere",
         "2) В какой сфере интересует сотрудничество? (логистика/субсидии/транзакции/финансирование)",
     ),
-    ("who", "3) Кто вы? (вебмастер/ВЭД-специалист/агентская сеть/сотрудник/другое)"),
-    ("value", "4) Опишите кратко: как приводите клиентов/какие задачи закрываете? (1–2 фразы)"),
-    ("volume", "5) Ожидаемый объём: сколько заявок/клиентов в месяц? (оценка)"),
+    (
+        "who",
+        "3) Кто вы? (вебмастер/ВЭД-специалист/агентская сеть/сотрудник/другое)",
+    ),
+    (
+        "value",
+        "4) Опишите кратко: как приводите клиентов/какие задачи закрываете? (1–2 фразы)",
+    ),
+    (
+        "volume",
+        "5) Ожидаемый объём: сколько заявок/клиентов в месяц? (оценка)",
+    ),
 ]
 
 
@@ -44,7 +55,11 @@ async def club_apply_back(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
     step = int(data.get("club_step", 0))
     answers: Dict[str, str] = dict(data.get("club_answers") or {})
-    service_key = data.get("service_key") if isinstance(data.get("service_key"), str) else "club_partnership"
+    service_key = (
+        data.get("service_key")
+        if isinstance(data.get("service_key"), str)
+        else "club_partnership"
+    )
 
     if step <= 0:
         await state.clear()
@@ -85,13 +100,19 @@ async def club_apply_back(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.callback_query(F.data.startswith("club:apply:start:"))
-async def start_club_apply(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
-    service_key = (callback.data or "").split("club:apply:start:", 1)[-1].strip()
+async def start_club_apply(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    service_key = (
+        (callback.data or "").split("club:apply:start:", 1)[-1].strip()
+    )
     if not service_key:
         service_key = "club_partnership"
 
     await state.set_state(ClubApply.waiting_for_answer)
-    await state.update_data(service_key=service_key, club_step=0, club_answers={})
+    await state.update_data(
+        service_key=service_key, club_step=0, club_answers={}
+    )
 
     await log_event(
         session,
@@ -121,7 +142,9 @@ async def start_club_apply(callback: CallbackQuery, state: FSMContext, session: 
 
 
 @router.message(ClubApply.waiting_for_answer)
-async def handle_club_apply_answer(message: Message, state: FSMContext, session: AsyncSession) -> None:
+async def handle_club_apply_answer(
+    message: Message, state: FSMContext, session: AsyncSession
+) -> None:
     text = (message.text or "").strip()
     if not text:
         return
@@ -129,7 +152,11 @@ async def handle_club_apply_answer(message: Message, state: FSMContext, session:
     data = await state.get_data()
     step = int(data.get("club_step", 0))
     answers: Dict[str, str] = dict(data.get("club_answers") or {})
-    service_key = data.get("service_key") if isinstance(data.get("service_key"), str) else "club_partnership"
+    service_key = (
+        data.get("service_key")
+        if isinstance(data.get("service_key"), str)
+        else "club_partnership"
+    )
 
     if step < 0 or step >= len(_CLUB_QUESTIONS):
         await state.clear()
@@ -138,7 +165,9 @@ async def handle_club_apply_answer(message: Message, state: FSMContext, session:
     key, q_text = _CLUB_QUESTIONS[step]
     answers[key] = text[:700]
 
-    await UserMemory.add_message(session, message.from_user.id, "user", f"{q_text}\nОтвет: {text}")
+    await UserMemory.add_message(
+        session, message.from_user.id, "user", f"{q_text}\nОтвет: {text}"
+    )
     await DialogMessage.create(
         session,
         user_id=message.from_user.id,
@@ -182,7 +211,9 @@ async def handle_club_apply_answer(message: Message, state: FSMContext, session:
     summary_lines = ["SRVT • Партнёрство / агентская программа"]
     for k, q in _CLUB_QUESTIONS:
         summary_lines.append(f"{q}\nОтвет: {answers.get(k, '')}")
-    summary_lines.append("SRVT обещание: персональный менеджер свяжется в течение 15 минут (в рабочее время).")
+    summary_lines.append(
+        "SRVT обещание: персональный менеджер свяжется в ближайшее время (в рабочее время)."
+    )
     summary_text = "\n\n".join(summary_lines)
 
     await log_event(
@@ -194,7 +225,9 @@ async def handle_club_apply_answer(message: Message, state: FSMContext, session:
         service_key=service_key,
     )
 
-    await UserMemory.add_message(session, message.from_user.id, "system", summary_text)
+    await UserMemory.add_message(
+        session, message.from_user.id, "system", summary_text
+    )
     await state.update_data(questionnaire_summary=summary_text)
 
     await ui_send_persistent(
@@ -204,6 +237,8 @@ async def handle_club_apply_answer(message: Message, state: FSMContext, session:
         text=result,
         reply_markup=lead_actions_keyboard(service_key),
         parse_mode=None,
+        persist=True,
+        session=session,
+        user_id=message.from_user.id,
+        username=message.from_user.username,
     )
-
-

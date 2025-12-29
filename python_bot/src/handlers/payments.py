@@ -214,7 +214,7 @@ async def handle_payments_precheck_answer(message: Message, state: FSMContext, s
     if rub:
         summary_lines.append(f"(детект) Сумма в ₽: ~{rub:,}".replace(",", " "))
 
-    summary_lines.append("SRVT обещание: персональный менеджер свяжется в течение 15 минут (в рабочее время).")
+    summary_lines.append("SRVT обещание: персональный менеджер свяжется в ближайшее время (в рабочее время).")
     summary_text = "\n\n".join(summary_lines)
 
     await log_event(
@@ -236,6 +236,10 @@ async def handle_payments_precheck_answer(message: Message, state: FSMContext, s
         text=plan,
         reply_markup=lead_actions_keyboard(service_key),
         parse_mode=None,
+        persist=True,
+        session=session,
+        user_id=message.from_user.id,
+        username=message.from_user.username,
     )
 
 

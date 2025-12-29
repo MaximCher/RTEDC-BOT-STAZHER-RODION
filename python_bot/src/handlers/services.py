@@ -7,8 +7,10 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
+from src.config import SERVICE_FLOWS, SERVICES
 from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
+from src.utils.funnel import log_event
 from src.utils.keyboards import (
     analytics_entry_keyboard,
     club_entry_keyboard,
@@ -20,11 +22,8 @@ from src.utils.keyboards import (
     subsidies_entry_keyboard,
 )
 from src.utils.messages import msg
-from src.utils.funnel import log_event
-
-from src.config import SERVICE_FLOWS, SERVICES
-from src.utils.ui_flow import format_step, ui_upsert, ui_send_persistent
 from src.utils.service_entry import entry_screen_for_service
+from src.utils.ui_flow import format_step, ui_send_persistent, ui_upsert
 
 router = Router()
 
@@ -34,7 +33,9 @@ class ServiceQuestionnaire(StatesGroup):
 
 
 @router.callback_query(F.data == "q:back")
-async def questionnaire_back(callback: CallbackQuery, state: FSMContext) -> None:
+async def questionnaire_back(
+    callback: CallbackQuery, state: FSMContext
+) -> None:
     # UX: acknowledge click immediately to stop Telegram "loading" spinner
     try:
         await callback.answer()
@@ -49,9 +50,13 @@ async def questionnaire_back(callback: CallbackQuery, state: FSMContext) -> None
     if not isinstance(service_key, str) or service_key not in SERVICE_FLOWS:
         await state.clear()
         try:
-            await callback.message.edit_text(msg("choose_service"), reply_markup=services_keyboard())
+            await callback.message.edit_text(
+                msg("choose_service"), reply_markup=services_keyboard()
+            )
         except Exception:
-            await callback.message.answer(msg("choose_service"), reply_markup=services_keyboard())
+            await callback.message.answer(
+                msg("choose_service"), reply_markup=services_keyboard()
+            )
         return
 
     flow = SERVICE_FLOWS[service_key]
@@ -77,7 +82,9 @@ async def questionnaire_back(callback: CallbackQuery, state: FSMContext) -> None
     new_index = index - 1
     if answers:
         answers.pop()
-    await state.update_data(questionnaire_index=new_index, questionnaire_answers=answers)
+    await state.update_data(
+        questionnaire_index=new_index, questionnaire_answers=answers
+    )
 
     await ui_upsert(
         bot=callback.message.bot,
@@ -110,12 +117,14 @@ async def handle_service_questionnaire_start(
     # We'll answer the callback after UI is rendered.
 
     user_id = callback.from_user.id
-    await UserMemory.update_user_data(session, user_id, selected_service=service_key)
+    await UserMemory.update_user_data(
+        session, user_id, selected_service=service_key
+    )
     await UserMemory.add_message(
         session,
         user_id,
         "system",
-        f"Клиент начал анкету по направлению: {SERVICES.get(service_key, service_key)}",
+        f"Клиент начал заявку на консультацию по направлению: {SERVICES.get(service_key, service_key)}",
     )
 
     await state.set_state(ServiceQuestionnaire.waiting_for_answer)
@@ -173,7 +182,9 @@ async def handle_service_selection(
 
     user_id = callback.from_user.id
 
-    await UserMemory.update_user_data(session, user_id, selected_service=service_key)
+    await UserMemory.update_user_data(
+        session, user_id, selected_service=service_key
+    )
     await UserMemory.add_message(
         session,
         user_id,
@@ -194,9 +205,13 @@ async def handle_service_selection(
     if service_key == "subsidies_financing":
         await state.clear()
         try:
-            await callback.message.edit_text(flow["description"], reply_markup=subsidies_entry_keyboard())
+            await callback.message.edit_text(
+                flow["description"], reply_markup=subsidies_entry_keyboard()
+            )
         except Exception:
-            await callback.message.answer(flow["description"], reply_markup=subsidies_entry_keyboard())
+            await callback.message.answer(
+                flow["description"], reply_markup=subsidies_entry_keyboard()
+            )
         try:
             await callback.answer()
         except Exception:
@@ -206,9 +221,13 @@ async def handle_service_selection(
     if service_key == "international_payments":
         await state.clear()
         try:
-            await callback.message.edit_text(flow["description"], reply_markup=payments_entry_keyboard())
+            await callback.message.edit_text(
+                flow["description"], reply_markup=payments_entry_keyboard()
+            )
         except Exception:
-            await callback.message.answer(flow["description"], reply_markup=payments_entry_keyboard())
+            await callback.message.answer(
+                flow["description"], reply_markup=payments_entry_keyboard()
+            )
         try:
             await callback.answer()
         except Exception:
@@ -218,9 +237,13 @@ async def handle_service_selection(
     if service_key == "logistics_ved":
         await state.clear()
         try:
-            await callback.message.edit_text(flow["description"], reply_markup=logistics_entry_keyboard())
+            await callback.message.edit_text(
+                flow["description"], reply_markup=logistics_entry_keyboard()
+            )
         except Exception:
-            await callback.message.answer(flow["description"], reply_markup=logistics_entry_keyboard())
+            await callback.message.answer(
+                flow["description"], reply_markup=logistics_entry_keyboard()
+            )
         try:
             await callback.answer()
         except Exception:
@@ -230,9 +253,13 @@ async def handle_service_selection(
     if service_key == "analytics_tnved":
         await state.clear()
         try:
-            await callback.message.edit_text(flow["description"], reply_markup=analytics_entry_keyboard())
+            await callback.message.edit_text(
+                flow["description"], reply_markup=analytics_entry_keyboard()
+            )
         except Exception:
-            await callback.message.answer(flow["description"], reply_markup=analytics_entry_keyboard())
+            await callback.message.answer(
+                flow["description"], reply_markup=analytics_entry_keyboard()
+            )
         try:
             await callback.answer()
         except Exception:
@@ -242,9 +269,13 @@ async def handle_service_selection(
     if service_key == "club_partnership":
         await state.clear()
         try:
-            await callback.message.edit_text(flow["description"], reply_markup=club_entry_keyboard())
+            await callback.message.edit_text(
+                flow["description"], reply_markup=club_entry_keyboard()
+            )
         except Exception:
-            await callback.message.answer(flow["description"], reply_markup=club_entry_keyboard())
+            await callback.message.answer(
+                flow["description"], reply_markup=club_entry_keyboard()
+            )
         try:
             await callback.answer()
         except Exception:
@@ -321,9 +352,11 @@ async def handle_questionnaire_answer(
 
     if index >= len(questions):
         # Build summary for Bitrix/comments
-        summary_lines = [f"Анкета: {flow['direction_label']}"]
+        summary_lines = [f"Заявка на консультацию: {flow['direction_label']}"]
         for item in answers:
-            summary_lines.append(f"{item['question']}\nОтвет: {item['answer']}")
+            summary_lines.append(
+                f"{item['question']}\nОтвет: {item['answer']}"
+            )
         summary_text = "\n\n".join(summary_lines)
 
         # Persist summary to user memory for future lead generation
@@ -349,10 +382,16 @@ async def handle_questionnaire_answer(
             text=flow["final_text"],
             reply_markup=lead_actions_keyboard(service_key),
             parse_mode=None,
+            persist=True,
+            session=session,
+            user_id=user_id,
+            username=message.from_user.username,
         )
         return
 
-    await state.update_data(questionnaire_index=index, questionnaire_answers=answers)
+    await state.update_data(
+        questionnaire_index=index, questionnaire_answers=answers
+    )
     await ui_upsert(
         bot=message.bot,
         state=state,
@@ -366,5 +405,3 @@ async def handle_questionnaire_answer(
         reply_markup=flow_nav_keyboard("q:back"),
         keep_at_bottom=True,
     )
-
-

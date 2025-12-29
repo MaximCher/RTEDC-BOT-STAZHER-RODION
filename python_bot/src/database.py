@@ -116,6 +116,17 @@ async def init_db() -> None:
         except Exception:
             # table may not exist yet or already correct; ignore
             pass
+        # Lead/CRM additions: store INN (tax id) without breaking existing DB
+        try:
+            await conn.execute(text("ALTER TABLE user_memory ADD COLUMN IF NOT EXISTS inn TEXT"))
+        except Exception:
+            pass
+        try:
+            await conn.execute(
+                text("ALTER TABLE lead_tickets ADD COLUMN IF NOT EXISTS lead_inn VARCHAR(16)")
+            )
+        except Exception:
+            pass
 
     logger.info(
         "database_initialized",

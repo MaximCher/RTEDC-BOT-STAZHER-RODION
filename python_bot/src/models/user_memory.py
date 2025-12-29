@@ -17,6 +17,7 @@ class UserMemory(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     full_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     phone: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    inn: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     selected_service: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     conversation_history: Mapped[List[Dict[str, Any]]] = mapped_column(
         JSONB, default=list, nullable=False
@@ -50,6 +51,7 @@ class UserMemory(Base):
         user_id: int,
         full_name: Optional[str] = None,
         phone: Optional[str] = None,
+        inn: Optional[str] = None,
         selected_service: Optional[str] = None,
     ) -> "UserMemory":
         user = await cls.get_or_create(session, user_id)
@@ -57,6 +59,8 @@ class UserMemory(Base):
             user.full_name = full_name
         if phone is not None:
             user.phone = phone
+        if inn is not None:
+            user.inn = inn
         if selected_service is not None:
             user.selected_service = selected_service
         session.add(user)
