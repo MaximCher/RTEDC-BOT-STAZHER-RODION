@@ -61,6 +61,8 @@ async def _render_logistics_step(
     username: str | None = None,
 ) -> None:
     explicit: dict[str, list[str]] = {
+        # Only where user can still type a different value if needed.
+        "terms": ["не знаю", "EXW", "FOB"],
         "timeline": ["сейчас", "1–2 недели", "месяц+"],
     }
     choices = explicit.get(question_key or "", [])

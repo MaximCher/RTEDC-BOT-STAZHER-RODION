@@ -79,6 +79,8 @@ async def _render_finance_step(
 ) -> None:
     explicit: dict[str, list[str]] = {
         "goal": ["новый", "рефинанс"],
+        # Typical terms to reduce typing; user can still enter any other value.
+        "term": ["12 мес", "24 мес", "36 мес"],
     }
     choices = explicit.get(question_key or "", [])
     if choices:
