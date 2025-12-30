@@ -68,6 +68,7 @@ async def _render_finance_step(
     title: str,
     step: int,
     total: int,
+    question_key: str | None = None,
     question: str,
     back_cb: str,
     prefer_message_id: int | None = None,
@@ -77,7 +78,12 @@ async def _render_finance_step(
     user_id: int | None = None,
     username: str | None = None,
 ) -> None:
-    choices = extract_quick_choices(question)
+    explicit: dict[str, list[str]] = {
+        "goal": ["новый", "рефинанс"],
+    }
+    choices = explicit.get(question_key or "", []) or extract_quick_choices(
+        question
+    )
     if choices:
         await state.update_data(qc_ctx="finance", qc_choices=choices)
         kb = flow_nav_with_choices_keyboard(
@@ -219,6 +225,7 @@ async def _process_finance_answer_text(
             title="SRVT • Финансирование / рефинанс",
             step=step + 1,
             total=len(_FIN_QUESTIONS),
+            question_key=_FIN_QUESTIONS[step][0],
             question=_FIN_QUESTIONS[step][1],
             back_cb="finance:calc:back",
             persist=True,
@@ -344,6 +351,7 @@ async def finance_calc_back(
         title="SRVT • Финансирование / рефинанс",
         step=new_step + 1,
         total=len(_FIN_QUESTIONS),
+        question_key=_FIN_QUESTIONS[new_step][0],
         question=_FIN_QUESTIONS[new_step][1],
         back_cb="finance:calc:back",
     )
@@ -390,6 +398,7 @@ async def start_finance_calc(
         step=1,
         total=len(_FIN_QUESTIONS),
         intro="Ок, сделаю предварительный расчёт. Это займёт ~2 минуты. Отвечайте коротко.",
+        question_key=_FIN_QUESTIONS[0][0],
         question=_FIN_QUESTIONS[0][1],
         back_cb="finance:calc:back",
         persist=True,

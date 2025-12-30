@@ -51,6 +51,7 @@ async def _render_logistics_step(
     title: str,
     step: int,
     total: int,
+    question_key: str | None = None,
     question: str,
     back_cb: str,
     prefer_message_id: int | None = None,
@@ -60,7 +61,12 @@ async def _render_logistics_step(
     user_id: int | None = None,
     username: str | None = None,
 ) -> None:
-    choices = extract_quick_choices(question)
+    explicit: dict[str, list[str]] = {
+        "timeline": ["сейчас", "1–2 недели", "месяц+"],
+    }
+    choices = explicit.get(question_key or "", []) or extract_quick_choices(
+        question
+    )
     if choices:
         await state.update_data(qc_ctx="logistics", qc_choices=choices)
         kb = flow_nav_with_choices_keyboard(
@@ -160,6 +166,7 @@ async def _process_logistics_answer_text(
             title="SRVT • Логистика и ВЭД",
             step=step + 1,
             total=len(_LOG_QUESTIONS),
+            question_key=_LOG_QUESTIONS[step][0],
             question=_LOG_QUESTIONS[step][1],
             back_cb="logistics:quote:back",
             persist=True,
@@ -253,6 +260,7 @@ async def logistics_quote_back(callback: CallbackQuery, state: FSMContext) -> No
         title="SRVT • Логистика и ВЭД",
         step=new_step + 1,
         total=len(_LOG_QUESTIONS),
+        question_key=_LOG_QUESTIONS[new_step][0],
         question=_LOG_QUESTIONS[new_step][1],
         back_cb="logistics:quote:back",
     )
@@ -286,6 +294,7 @@ async def start_logistics_quote(callback: CallbackQuery, state: FSMContext, sess
         step=1,
         total=len(_LOG_QUESTIONS),
         intro="Ок, соберу вводные для расчёта логистики SRVT. Это займёт ~1 минуту.",
+        question_key=_LOG_QUESTIONS[0][0],
         question=_LOG_QUESTIONS[0][1],
         back_cb="logistics:quote:back",
         persist=True,

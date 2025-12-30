@@ -58,6 +58,7 @@ async def _render_payments_step(
     title: str,
     step: int,
     total: int,
+    question_key: str | None = None,
     question: str,
     back_cb: str,
     prefer_message_id: int | None = None,
@@ -67,7 +68,12 @@ async def _render_payments_step(
     user_id: int | None = None,
     username: str | None = None,
 ) -> None:
-    choices = extract_quick_choices(question)
+    explicit: dict[str, list[str]] = {
+        "direction": ["отправить", "получить"],
+    }
+    choices = explicit.get(question_key or "", []) or extract_quick_choices(
+        question
+    )
     if choices:
         await state.update_data(qc_ctx="payments", qc_choices=choices)
         kb = flow_nav_with_choices_keyboard(
@@ -170,6 +176,7 @@ async def _process_payments_answer_text(
             title="SRVT • Международные платежи",
             step=step + 1,
             total=len(_PAYMENTS_QUESTIONS),
+            question_key=_PAYMENTS_QUESTIONS[step][0],
             question=_PAYMENTS_QUESTIONS[step][1],
             back_cb="payments:precheck:back",
             persist=True,
@@ -279,6 +286,7 @@ async def payments_precheck_back(
         title="SRVT • Международные платежи",
         step=new_step + 1,
         total=len(_PAYMENTS_QUESTIONS),
+        question_key=_PAYMENTS_QUESTIONS[new_step][0],
         question=_PAYMENTS_QUESTIONS[new_step][1],
         back_cb="payments:precheck:back",
     )
@@ -318,6 +326,7 @@ async def start_payments_precheck(
         step=1,
         total=len(_PAYMENTS_QUESTIONS),
         intro="Ок, быстро уточню детали и передам менеджеру SRVT. Это займёт ~1 минуту.",
+        question_key=_PAYMENTS_QUESTIONS[0][0],
         question=_PAYMENTS_QUESTIONS[0][1],
         back_cb="payments:precheck:back",
         persist=True,

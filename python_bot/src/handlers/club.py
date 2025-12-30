@@ -58,6 +58,7 @@ async def _render_club_step(
     title: str,
     step: int,
     total: int,
+    question_key: str | None = None,
     question: str,
     back_cb: str,
     prefer_message_id: int | None = None,
@@ -67,7 +68,13 @@ async def _render_club_step(
     user_id: int | None = None,
     username: str | None = None,
 ) -> None:
-    choices = extract_quick_choices(question)
+    explicit: dict[str, list[str]] = {
+        "format": ["партнёр", "агент"],
+    }
+    choices = (
+        explicit.get(question_key or "", [])
+        or extract_quick_choices(question)
+    )
     if choices:
         await state.update_data(qc_ctx="club", qc_choices=choices)
         kb = flow_nav_with_choices_keyboard(
@@ -151,6 +158,7 @@ async def _process_club_answer_text(
             title="SRVT • Клуб / партнёрство",
             step=step + 1,
             total=len(_CLUB_QUESTIONS),
+            question_key=_CLUB_QUESTIONS[step][0],
             question=_CLUB_QUESTIONS[step][1],
             back_cb="club:apply:back",
             persist=True,
@@ -286,6 +294,7 @@ async def start_club_apply(
         title="SRVT • Клуб / партнёрство",
         step=1,
         total=len(_CLUB_QUESTIONS),
+        question_key=_CLUB_QUESTIONS[0][0],
         intro="Ок, быстро уточню детали и передам менеджеру SRVT. Это займёт ~1 минуту.",
         question=_CLUB_QUESTIONS[0][1],
         back_cb="club:apply:back",

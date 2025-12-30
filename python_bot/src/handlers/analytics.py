@@ -49,6 +49,7 @@ async def _render_analytics_step(
     title: str,
     step: int,
     total: int,
+    question_key: str | None = None,
     question: str,
     back_cb: str,
     prefer_message_id: int | None = None,
@@ -58,7 +59,13 @@ async def _render_analytics_step(
     user_id: int | None = None,
     username: str | None = None,
 ) -> None:
-    choices = extract_quick_choices(question)
+    explicit: dict[str, list[str]] = {
+        "report_type": ["краткий", "расширенный"],
+        "timeline": ["сейчас", "в течение недели", "позже"],
+    }
+    choices = explicit.get(question_key or "", []) or extract_quick_choices(
+        question
+    )
     if choices:
         await state.update_data(qc_ctx="analytics", qc_choices=choices)
         kb = flow_nav_with_choices_keyboard(
@@ -142,6 +149,7 @@ async def _process_analytics_answer_text(
             title="SRVT • Аналитика / ТН ВЭД",
             step=step + 1,
             total=len(_AN_QUESTIONS),
+            question_key=_AN_QUESTIONS[step][0],
             question=_AN_QUESTIONS[step][1],
             back_cb="analytics:report:back",
             persist=True,
@@ -239,6 +247,7 @@ async def analytics_report_back(
         title="SRVT • Аналитика / ТН ВЭД",
         step=new_step + 1,
         total=len(_AN_QUESTIONS),
+        question_key=_AN_QUESTIONS[new_step][0],
         question=_AN_QUESTIONS[new_step][1],
         back_cb="analytics:report:back",
     )
@@ -276,6 +285,7 @@ async def start_analytics_report(
         step=1,
         total=len(_AN_QUESTIONS),
         intro="Ок, соберу вводные для аналитического отчёта SRVT. Это займёт ~1 минуту.",
+        question_key=_AN_QUESTIONS[0][0],
         question=_AN_QUESTIONS[0][1],
         back_cb="analytics:report:back",
         persist=True,

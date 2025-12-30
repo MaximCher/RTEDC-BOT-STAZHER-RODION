@@ -49,6 +49,7 @@ async def _render_quick_audit_step(
     title: str,
     step: int,
     total: int,
+    question_key: str | None = None,
     question: str,
     back_cb: str,
     prefer_message_id: int | None = None,
@@ -58,7 +59,13 @@ async def _render_quick_audit_step(
     user_id: int | None = None,
     username: str | None = None,
 ) -> None:
-    choices = extract_quick_choices(question)
+    explicit: dict[str, list[str]] = {
+        "target": ["партнёр", "своя компания"],
+        "urgency": ["сейчас", "сегодня", "не срочно"],
+    }
+    choices = explicit.get(question_key or "", []) or extract_quick_choices(
+        question
+    )
     if choices:
         await state.update_data(qc_ctx="quick_audit", qc_choices=choices)
         kb = flow_nav_with_choices_keyboard(
@@ -163,6 +170,7 @@ async def _process_quick_audit_answer_text(
             title="SRVT • Quick Audit по ИНН",
             step=step + 1,
             total=len(_QA_QUESTIONS),
+            question_key=_QA_QUESTIONS[step][0],
             question=_QA_QUESTIONS[step][1],
             back_cb="audit:quick:back",
             persist=True,
@@ -253,6 +261,7 @@ async def quick_audit_back(callback: CallbackQuery, state: FSMContext) -> None:
         title="SRVT • Quick Audit по ИНН",
         step=new_step + 1,
         total=len(_QA_QUESTIONS),
+        question_key=_QA_QUESTIONS[new_step][0],
         question=_QA_QUESTIONS[new_step][1],
         back_cb="audit:quick:back",
     )
@@ -286,6 +295,7 @@ async def start_quick_audit(callback: CallbackQuery, state: FSMContext, session:
         step=1,
         total=len(_QA_QUESTIONS),
         intro="Ок, сделаем быстрый аудит по ИНН. Это займёт ~1 минуту.",
+        question_key=_QA_QUESTIONS[0][0],
         question=_QA_QUESTIONS[0][1],
         back_cb="audit:quick:back",
         persist=True,

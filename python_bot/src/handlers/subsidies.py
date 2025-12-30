@@ -81,6 +81,7 @@ async def _render_subsidy_calc_step(
     chat_id: int,
     step: int,
     total: int,
+    question_key: str | None = None,
     question: str,
     back_cb: str,
     prefer_message_id: int | None = None,
@@ -90,7 +91,12 @@ async def _render_subsidy_calc_step(
     user_id: int | None = None,
     username: str | None = None,
 ) -> None:
-    choices = extract_quick_choices(question)
+    explicit: dict[str, list[str]] = {
+        "export": ["да", "нет"],
+    }
+    choices = explicit.get(question_key or "", []) or extract_quick_choices(
+        question
+    )
     if choices:
         await state.update_data(qc_ctx="subsidy_calc", qc_choices=choices)
         kb = flow_nav_with_choices_keyboard(
@@ -193,6 +199,7 @@ async def _process_subsidy_calc_answer_text(
             chat_id=chat_id,
             step=step + 1,
             total=len(_SUBSIDY_CALC_QUESTIONS),
+            question_key=_SUBSIDY_CALC_QUESTIONS[step][0],
             question=_SUBSIDY_CALC_QUESTIONS[step][1],
             back_cb="subsidy:calc:back",
             persist=True,
@@ -305,6 +312,7 @@ async def subsidy_calc_back(callback: CallbackQuery, state: FSMContext) -> None:
         prefer_message_id=callback.message.message_id,
         step=new_step + 1,
         total=len(_SUBSIDY_CALC_QUESTIONS),
+        question_key=_SUBSIDY_CALC_QUESTIONS[new_step][0],
         question=_SUBSIDY_CALC_QUESTIONS[new_step][1],
         back_cb="subsidy:calc:back",
     )
@@ -337,6 +345,7 @@ async def start_subsidy_calc(callback: CallbackQuery, state: FSMContext, session
         step=1,
         total=len(_SUBSIDY_CALC_QUESTIONS),
         intro=msg("subsidy_calc_intro"),
+        question_key=_SUBSIDY_CALC_QUESTIONS[0][0],
         question=_SUBSIDY_CALC_QUESTIONS[0][1],
         back_cb="subsidy:calc:back",
         persist=True,
