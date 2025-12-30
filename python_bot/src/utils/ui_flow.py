@@ -14,6 +14,10 @@ from src.models.dialog_message import DialogMessage
 UI_MESSAGE_ID_KEY = "_ui_message_id"
 UI_MODE_KEY = "_ui_mode"
 
+# Telegram sometimes renders message bubbles/inline keyboards "narrow" if the text is short.
+# A mostly-invisible padding line keeps UI width stable across steps.
+_UI_WIDTH_PAD = "⠀" * 24  # U+2800 BRAILLE PATTERN BLANK
+
 
 def _coerce_bool(v: object, default: bool = False) -> bool:
     if isinstance(v, bool):
@@ -37,6 +41,8 @@ def format_step(
         parts.append(intro_h)
     parts.append("")
     parts.append(question_h)
+    # Keep a stable UI width so inline keyboards don't look "tiny" on short steps.
+    parts.append(_UI_WIDTH_PAD)
     return "\n".join(parts).strip()
 
 
@@ -51,6 +57,8 @@ def _to_plain_text(text: str) -> str:
     # Make history less "technical": drop the "Шаг X/Y" line from format_step().
     lines = [ln.strip() for ln in raw.splitlines()]
     lines = [ln for ln in lines if ln]
+    # Drop the invisible UI width padding line (braille blanks/spaces).
+    lines = [ln for ln in lines if not re.fullmatch(r"[⠀\s]+", ln)]
     if len(lines) >= 2 and re.match(r"^Шаг\s+\d+\s*/\s*\d+\s*$", lines[1]):
         lines.pop(1)
     return "\n".join(lines).strip()
