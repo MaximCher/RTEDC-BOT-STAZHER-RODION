@@ -18,13 +18,14 @@ def flow_nav_keyboard(back_callback_data: str | None = None) -> InlineKeyboardMa
     We prefer a consistent UX: show "Назад" + "В меню".
     If back_callback_data is not provided, "Назад" will behave as "В меню".
     """
-    back_cb = back_callback_data or "menu:root"
+    # Prefer opening menu as a new message so we never overwrite "important" bot messages.
+    back_cb = back_callback_data or "menu:new"
     # UX: keep navigation buttons full-width and stable across screens
     # (1 button per row prevents "jumping" between wide and narrow layouts).
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="⬅️ Назад", callback_data=back_cb)],
-            [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:root")],
+            [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:new")],
         ]
     )
 
@@ -243,7 +244,7 @@ def meeting_window_keyboard(include_back: bool = False) -> InlineKeyboardMarkup:
                 if include_back
                 else []
             ),
-            [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:root")],
+            [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:new")],
         ]
     )
 
