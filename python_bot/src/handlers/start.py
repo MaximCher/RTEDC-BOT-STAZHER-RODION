@@ -111,8 +111,7 @@ async def _maybe_request_contact(
                 KeyboardButton(
                     text="📲 Поделиться контактом", request_contact=True
                 )
-            ],
-            [KeyboardButton(text="Пропустить")],
+            ]
         ],
         resize_keyboard=True,
         one_time_keyboard=True,
@@ -392,12 +391,30 @@ async def on_contact_shared(
     await _render_menu(message, state, session)
 
 
-@router.message(F.text == "Пропустить")
-async def skip_contact(
+@router.message()
+async def enforce_contact_required(
     message: Message, state: FSMContext, session: AsyncSession
 ) -> None:
-    await message.answer("Ок.", reply_markup=ReplyKeyboardRemove())
-    await _render_menu(message, state, session)
+    """
+    If "ask contact on start" is enabled and user has no phone yet, contact sharing is mandatory.
+    Any user message (except a Contact message) will re-trigger the contact request.
+    """
+    # Ignore contact messages (handled above)
+    if message.contact is not None:
+        return
+    if not await _ask_contact_enabled(session):
+        return
+    um = await UserMemory.get_or_create(session, message.from_user.id)
+    if um.phone:
+        return
+    allowed, missing, _ = await _check_gate(
+        bot=message.bot, session=session, user_id=message.from_user.id
+    )
+    if not allowed:
+        await message.answer(gate_text(missing), reply_markup=gate_keyboard(missing))
+        return
+    # Mandatory contact: keep asking until user shares it
+    await _maybe_request_contact(message, session)
 
 
 @router.callback_query(F.data.startswith("entry:new:"))

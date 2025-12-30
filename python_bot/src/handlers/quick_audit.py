@@ -12,9 +12,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
 from src.utils.funnel import log_event
-from src.utils.keyboards import flow_nav_keyboard, lead_actions_keyboard
+from src.utils.keyboards import (
+    flow_nav_keyboard,
+    flow_nav_with_choices_keyboard,
+    lead_actions_keyboard,
+)
 from src.utils.ui_flow import format_step, ui_upsert, ui_send_persistent
 from src.utils.service_entry import entry_screen_for_service
+from src.utils.quick_choices import extract_quick_choices
 
 router = Router()
 
@@ -27,10 +32,184 @@ _INN_RE = re.compile(r"\b\d{10}\b|\b\d{12}\b")
 
 _QA_QUESTIONS: List[Tuple[str, str]] = [
     ("inn", "1) ИНН компании (10 или 12 цифр)"),
-    ("target", "2) Кого проверяем: потенциального партнёра или свою компанию?"),
+    (
+        "target",
+        "2) Кого проверяем: потенциального партнёра или свою компанию? (партнёр/своя компания)",
+    ),
     ("focus", "3) Что важно проверить? (риски/суды/финансы/исп. производства/всё)"),
     ("urgency", "4) Срочность: сейчас / сегодня / не срочно"),
 ]
+
+
+async def _render_quick_audit_step(
+    *,
+    bot,
+    state: FSMContext,
+    chat_id: int,
+    title: str,
+    step: int,
+    total: int,
+    question: str,
+    back_cb: str,
+    prefer_message_id: int | None = None,
+    intro: str | None = None,
+    persist: bool = False,
+    session: AsyncSession | None = None,
+    user_id: int | None = None,
+    username: str | None = None,
+) -> None:
+    choices = extract_quick_choices(question)
+    if choices:
+        await state.update_data(qc_ctx="quick_audit", qc_choices=choices)
+        kb = flow_nav_with_choices_keyboard(
+            back_callback_data=back_cb,
+            choices=choices,
+            choice_callback_prefix="qc:quick_audit",
+        )
+    else:
+        await state.update_data(qc_ctx="", qc_choices=[])
+        kb = flow_nav_keyboard(back_cb)
+
+    await ui_upsert(
+        bot=bot,
+        state=state,
+        chat_id=chat_id,
+        prefer_message_id=prefer_message_id,
+        text=format_step(
+            title=title, step=step, total=total, intro=intro, question=question
+        ),
+        reply_markup=kb,
+        keep_at_bottom=True,
+        persist=persist,
+        session=session,
+        user_id=user_id,
+        username=username,
+    )
+
+
+async def _process_quick_audit_answer_text(
+    *,
+    text: str,
+    bot,
+    state: FSMContext,
+    session: AsyncSession,
+    chat_id: int,
+    user_id: int,
+    username: str | None,
+    user_message_id: int | None,
+) -> None:
+    t = (text or "").strip()
+    if not t:
+        return
+
+    data = await state.get_data()
+    step = int(data.get("qa_step", 0))
+    answers: Dict[str, str] = dict(data.get("qa_answers") or {})
+    service_key = (
+        data.get("service_key")
+        if isinstance(data.get("service_key"), str)
+        else "quick_audit_inn"
+    )
+
+    if step < 0 or step >= len(_QA_QUESTIONS):
+        await state.clear()
+        return
+
+    key, q_text = _QA_QUESTIONS[step]
+    if key == "inn":
+        m = _INN_RE.search(t)
+        if not m:
+            await _render_quick_audit_step(
+                bot=bot,
+                state=state,
+                chat_id=chat_id,
+                title="SRVT • Quick Audit по ИНН",
+                step=step + 1,
+                total=len(_QA_QUESTIONS),
+                intro="Ошибка: не вижу ИНН. Пришлите 10 или 12 цифр (без пробелов).",
+                question=q_text,
+                back_cb="audit:quick:back",
+                persist=True,
+                session=session,
+                user_id=user_id,
+                username=username,
+            )
+            return
+        t = m.group(0)
+
+    answers[key] = t[:400]
+
+    await UserMemory.add_message(session, user_id, "user", f"{q_text}\nОтвет: {t}")
+    await DialogMessage.create(
+        session,
+        user_id=user_id,
+        username=username,
+        full_name=None,
+        phone=None,
+        message_text=t,
+        role="user",
+        chat_id=chat_id,
+        message_id=user_message_id,
+    )
+
+    step += 1
+    await state.update_data(qa_step=step, qa_answers=answers)
+
+    if step < len(_QA_QUESTIONS):
+        await _render_quick_audit_step(
+            bot=bot,
+            state=state,
+            chat_id=chat_id,
+            title="SRVT • Quick Audit по ИНН",
+            step=step + 1,
+            total=len(_QA_QUESTIONS),
+            question=_QA_QUESTIONS[step][1],
+            back_cb="audit:quick:back",
+            persist=True,
+            session=session,
+            user_id=user_id,
+            username=username,
+        )
+        return
+
+    result = (
+        "Готово ✅\n\n"
+        "Менеджер SRVT подготовит сводный аудит (реквизиты, суды/арбитраж, финансы, исполнительные производства, риски) и пришлёт выводы.\n\n"
+        "Оставьте контакт + удобное время для созвона — передам заявку."
+    )
+
+    summary_lines = ["SRVT • Quick audit по ИНН"]
+    for k, q in _QA_QUESTIONS:
+        summary_lines.append(f"{q}\nОтвет: {answers.get(k, '')}")
+    summary_lines.append(
+        "SRVT обещание: персональный менеджер свяжется в ближайшее время (в рабочее время)."
+    )
+    summary_text = "\n\n".join(summary_lines)
+
+    await log_event(
+        session,
+        user_id=user_id,
+        chat_id=chat_id,
+        username=username,
+        event="quick_audit_complete",
+        service_key=service_key,
+    )
+
+    await UserMemory.add_message(session, user_id, "system", summary_text)
+    await state.update_data(questionnaire_summary=summary_text)
+
+    await ui_send_persistent(
+        bot=bot,
+        state=state,
+        chat_id=chat_id,
+        text=result,
+        reply_markup=lead_actions_keyboard(service_key),
+        parse_mode=None,
+        persist=True,
+        session=session,
+        user_id=user_id,
+        username=username,
+    )
 
 
 @router.callback_query(F.data == "audit:quick:back")
@@ -66,19 +245,16 @@ async def quick_audit_back(callback: CallbackQuery, state: FSMContext) -> None:
     answers.pop(key, None)
     await state.update_data(qa_step=new_step, qa_answers=answers)
 
-    await ui_upsert(
+    await _render_quick_audit_step(
         bot=callback.message.bot,
         state=state,
         chat_id=callback.message.chat.id,
         prefer_message_id=callback.message.message_id,
-        text=format_step(
-            title="SRVT • Quick Audit по ИНН",
-            step=new_step + 1,
-            total=len(_QA_QUESTIONS),
-            question=_QA_QUESTIONS[new_step][1],
-        ),
-        reply_markup=flow_nav_keyboard("audit:quick:back"),
-        keep_at_bottom=True,
+        title="SRVT • Quick Audit по ИНН",
+        step=new_step + 1,
+        total=len(_QA_QUESTIONS),
+        question=_QA_QUESTIONS[new_step][1],
+        back_cb="audit:quick:back",
     )
     await callback.answer()
 
@@ -101,20 +277,17 @@ async def start_quick_audit(callback: CallbackQuery, state: FSMContext, session:
         service_key=service_key,
     )
 
-    await ui_upsert(
+    await _render_quick_audit_step(
         bot=callback.message.bot,
         state=state,
         chat_id=callback.message.chat.id,
         prefer_message_id=callback.message.message_id,
-        text=format_step(
-            title="SRVT • Quick Audit по ИНН",
-            step=1,
-            total=len(_QA_QUESTIONS),
-            intro="Ок, сделаем быстрый аудит по ИНН. Это займёт ~1 минуту.",
-            question=_QA_QUESTIONS[0][1],
-        ),
-        reply_markup=flow_nav_keyboard("audit:quick:back"),
-        keep_at_bottom=True,
+        title="SRVT • Quick Audit по ИНН",
+        step=1,
+        total=len(_QA_QUESTIONS),
+        intro="Ок, сделаем быстрый аудит по ИНН. Это займёт ~1 минуту.",
+        question=_QA_QUESTIONS[0][1],
+        back_cb="audit:quick:back",
         persist=True,
         session=session,
         user_id=callback.from_user.id,
@@ -123,117 +296,53 @@ async def start_quick_audit(callback: CallbackQuery, state: FSMContext, session:
     await callback.answer()
 
 
-@router.message(QuickAudit.waiting_for_answer)
-async def handle_quick_audit_answer(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    text = (message.text or "").strip()
-    if not text:
+@router.callback_query(F.data.startswith("qc:quick_audit:"))
+async def quick_audit_quick_choice(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+    current = await state.get_state()
+    if current != QuickAudit.waiting_for_answer.state:
+        return
+
+    raw = (callback.data or "").split("qc:quick_audit:", 1)[-1].strip()
+    try:
+        idx = int(raw)
+    except ValueError:
         return
 
     data = await state.get_data()
-    step = int(data.get("qa_step", 0))
-    answers: Dict[str, str] = dict(data.get("qa_answers") or {})
-    service_key = data.get("service_key") if isinstance(data.get("service_key"), str) else "quick_audit_inn"
-
-    if step < 0 or step >= len(_QA_QUESTIONS):
-        await state.clear()
+    if data.get("qc_ctx") != "quick_audit":
         return
-
-    key, q_text = _QA_QUESTIONS[step]
-    if key == "inn":
-        m = _INN_RE.search(text)
-        if not m:
-            await ui_upsert(
-                bot=message.bot,
-                state=state,
-                chat_id=message.chat.id,
-                text=format_step(
-                    title="SRVT • Quick Audit по ИНН",
-                    step=step + 1,
-                    total=len(_QA_QUESTIONS),
-                    intro="Ошибка: не вижу ИНН. Пришлите 10 или 12 цифр (без пробелов).",
-                    question=q_text,
-                ),
-                reply_markup=flow_nav_keyboard("audit:quick:back"),
-                keep_at_bottom=True,
-                persist=True,
-                session=session,
-                user_id=message.from_user.id,
-                username=message.from_user.username,
-            )
-            return
-        text = m.group(0)
-
-    answers[key] = text[:400]
-
-    await UserMemory.add_message(session, message.from_user.id, "user", f"{q_text}\nОтвет: {text}")
-    await DialogMessage.create(
-        session,
-        user_id=message.from_user.id,
-        username=message.from_user.username,
-        full_name=None,
-        phone=None,
-        message_text=text,
-        role="user",
-        chat_id=message.chat.id,
-        message_id=message.message_id,
-    )
-
-    step += 1
-    await state.update_data(qa_step=step, qa_answers=answers)
-
-    if step < len(_QA_QUESTIONS):
-        await ui_upsert(
-            bot=message.bot,
-            state=state,
-            chat_id=message.chat.id,
-            text=format_step(
-                title="SRVT • Quick Audit по ИНН",
-                step=step + 1,
-                total=len(_QA_QUESTIONS),
-                question=_QA_QUESTIONS[step][1],
-            ),
-            reply_markup=flow_nav_keyboard("audit:quick:back"),
-            keep_at_bottom=True,
-            persist=True,
-            session=session,
-            user_id=message.from_user.id,
-            username=message.from_user.username,
-        )
+    choices = data.get("qc_choices") or []
+    if not isinstance(choices, list) or idx < 0 or idx >= len(choices):
         return
+    answer = str(choices[idx])
 
-    result = (
-        "Готово ✅\n\n"
-        "Менеджер SRVT подготовит сводный аудит (реквизиты, суды/арбитраж, финансы, исполнительные производства, риски) и пришлёт выводы.\n\n"
-        "Оставьте контакт + удобное время для созвона — передам заявку."
+    await _process_quick_audit_answer_text(
+        text=answer,
+        bot=callback.message.bot,
+        state=state,
+        session=session,
+        chat_id=callback.message.chat.id,
+        user_id=callback.from_user.id,
+        username=callback.from_user.username,
+        user_message_id=None,
     )
 
-    summary_lines = ["SRVT • Quick audit по ИНН"]
-    for k, q in _QA_QUESTIONS:
-        summary_lines.append(f"{q}\nОтвет: {answers.get(k, '')}")
-    summary_lines.append("SRVT обещание: персональный менеджер свяжется в ближайшее время (в рабочее время).")
-    summary_text = "\n\n".join(summary_lines)
 
-    await log_event(
-        session,
-        user_id=message.from_user.id,
-        chat_id=message.chat.id,
-        username=message.from_user.username,
-        event="quick_audit_complete",
-        service_key=service_key,
-    )
-
-    await UserMemory.add_message(session, message.from_user.id, "system", summary_text)
-    await state.update_data(questionnaire_summary=summary_text)
-
-    await ui_send_persistent(
+@router.message(QuickAudit.waiting_for_answer)
+async def handle_quick_audit_answer(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    await _process_quick_audit_answer_text(
+        text=message.text or "",
         bot=message.bot,
         state=state,
-        chat_id=message.chat.id,
-        text=result,
-        reply_markup=lead_actions_keyboard(service_key),
-        parse_mode=None,
-        persist=True,
         session=session,
+        chat_id=message.chat.id,
         user_id=message.from_user.id,
         username=message.from_user.username,
+        user_message_id=message.message_id,
     )

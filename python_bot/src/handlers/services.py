@@ -15,6 +15,7 @@ from src.utils.keyboards import (
     analytics_entry_keyboard,
     club_entry_keyboard,
     flow_nav_keyboard,
+    flow_nav_with_choices_keyboard,
     lead_actions_keyboard,
     logistics_entry_keyboard,
     payments_entry_keyboard,
@@ -24,12 +25,59 @@ from src.utils.keyboards import (
 from src.utils.messages import msg
 from src.utils.service_entry import entry_screen_for_service
 from src.utils.ui_flow import format_step, ui_send_persistent, ui_upsert
+from src.utils.quick_choices import extract_quick_choices
 
 router = Router()
 
 
 class ServiceQuestionnaire(StatesGroup):
     waiting_for_answer = State()
+
+
+async def _render_service_question(
+    *,
+    bot,
+    state: FSMContext,
+    chat_id: int,
+    title: str,
+    step: int,
+    total: int,
+    question: str,
+    back_cb: str,
+    prefer_message_id: int | None = None,
+    intro: str | None = None,
+    persist: bool = False,
+    session: AsyncSession | None = None,
+    user_id: int | None = None,
+    username: str | None = None,
+) -> None:
+    choices = extract_quick_choices(question)
+    if choices:
+        await state.update_data(qc_ctx="service_q", qc_choices=choices)
+        kb = flow_nav_with_choices_keyboard(
+            back_callback_data=back_cb,
+            choices=choices,
+            choice_callback_prefix="qc:service_q",
+        )
+    else:
+        await state.update_data(qc_ctx="", qc_choices=[])
+        kb = flow_nav_keyboard(back_cb)
+
+    await ui_upsert(
+        bot=bot,
+        state=state,
+        chat_id=chat_id,
+        prefer_message_id=prefer_message_id,
+        text=format_step(
+            title=title, step=step, total=total, intro=intro, question=question
+        ),
+        reply_markup=kb,
+        keep_at_bottom=True,
+        persist=persist,
+        session=session,
+        user_id=user_id,
+        username=username,
+    )
 
 
 @router.callback_query(F.data == "q:back")
@@ -86,19 +134,16 @@ async def questionnaire_back(
         questionnaire_index=new_index, questionnaire_answers=answers
     )
 
-    await ui_upsert(
+    await _render_service_question(
         bot=callback.message.bot,
         state=state,
         chat_id=callback.message.chat.id,
         prefer_message_id=callback.message.message_id,
-        text=format_step(
-            title=f"SRVT • {SERVICES.get(service_key, service_key)}",
-            step=new_index + 1,
-            total=len(questions),
-            question=questions[new_index],
-        ),
-        reply_markup=flow_nav_keyboard("q:back"),
-        keep_at_bottom=True,
+        title=f"SRVT • {SERVICES.get(service_key, service_key)}",
+        step=new_index + 1,
+        total=len(questions),
+        question=questions[new_index],
+        back_cb="q:back",
     )
 
 
@@ -144,21 +189,17 @@ async def handle_service_questionnaire_start(
     )
 
     questions: List[str] = flow["questions"]
-    text = format_step(
+    await _render_service_question(
+        bot=callback.message.bot,
+        state=state,
+        chat_id=callback.message.chat.id,
+        prefer_message_id=callback.message.message_id,
         title=f"SRVT • {SERVICES.get(service_key, service_key)}",
         step=1,
         total=len(questions),
         intro=flow["description"],
         question=questions[0],
-    )
-    await ui_upsert(
-        bot=callback.message.bot,
-        state=state,
-        chat_id=callback.message.chat.id,
-        prefer_message_id=callback.message.message_id,
-        text=text,
-        reply_markup=flow_nav_keyboard("q:back"),
-        keep_at_bottom=True,
+        back_cb="q:back",
         persist=True,
         session=session,
         user_id=callback.from_user.id,
@@ -294,21 +335,17 @@ async def handle_service_selection(
     )
 
     questions: List[str] = flow["questions"]
-    text = format_step(
+    await _render_service_question(
+        bot=callback.message.bot,
+        state=state,
+        chat_id=callback.message.chat.id,
+        prefer_message_id=callback.message.message_id,
         title=f"SRVT • {SERVICES.get(service_key, service_key)}",
         step=1,
         total=len(questions),
         intro=flow["description"],
         question=questions[0],
-    )
-    await ui_upsert(
-        bot=callback.message.bot,
-        state=state,
-        chat_id=callback.message.chat.id,
-        prefer_message_id=callback.message.message_id,
-        text=text,
-        reply_markup=flow_nav_keyboard("q:back"),
-        keep_at_bottom=True,
+        back_cb="q:back",
         persist=True,
         session=session,
         user_id=callback.from_user.id,
@@ -400,20 +437,138 @@ async def handle_questionnaire_answer(
     await state.update_data(
         questionnaire_index=index, questionnaire_answers=answers
     )
-    await ui_upsert(
+    await _render_service_question(
         bot=message.bot,
         state=state,
         chat_id=message.chat.id,
-        text=format_step(
-            title=f"SRVT • {SERVICES.get(service_key, service_key)}",
-            step=index + 1,
-            total=len(questions),
-            question=questions[index],
-        ),
-        reply_markup=flow_nav_keyboard("q:back"),
-        keep_at_bottom=True,
+        title=f"SRVT • {SERVICES.get(service_key, service_key)}",
+        step=index + 1,
+        total=len(questions),
+        question=questions[index],
+        back_cb="q:back",
         persist=True,
         session=session,
         user_id=user_id,
         username=message.from_user.username,
+    )
+
+
+@router.callback_query(F.data.startswith("qc:service_q:"))
+async def service_questionnaire_quick_choice(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+    current = await state.get_state()
+    if current != ServiceQuestionnaire.waiting_for_answer.state:
+        return
+
+    raw = (callback.data or "").split("qc:service_q:", 1)[-1].strip()
+    try:
+        idx = int(raw)
+    except ValueError:
+        return
+
+    data = await state.get_data()
+    if data.get("qc_ctx") != "service_q":
+        return
+    choices = data.get("qc_choices") or []
+    if not isinstance(choices, list) or idx < 0 or idx >= len(choices):
+        return
+    answer = str(choices[idx])
+
+    # Reuse the same handler logic by saving a synthetic "user" message and advancing.
+    # We do not have a real message_id for clicks, so store message_id=None.
+    user_id = callback.from_user.id
+    user_answer = answer.strip()
+    if not user_answer:
+        return
+
+    data = await state.get_data()
+    service_key = data.get("selected_service")
+    if not isinstance(service_key, str) or service_key not in SERVICE_FLOWS:
+        await state.clear()
+        return
+
+    flow = SERVICE_FLOWS[service_key]
+    questions: List[str] = flow["questions"]
+    index = int(data.get("questionnaire_index", 0))
+    answers_list: List[Dict[str, Any]] = list(data.get("questionnaire_answers", []))
+
+    question_text = questions[index]
+    answers_list.append({"question": question_text, "answer": user_answer})
+
+    await UserMemory.add_message(
+        session, user_id, "user", f"{question_text}\nОтвет: {user_answer}"
+    )
+    await DialogMessage.create(
+        session,
+        user_id=user_id,
+        username=callback.from_user.username,
+        full_name=None,
+        phone=None,
+        message_text=user_answer,
+        role="user",
+        chat_id=callback.message.chat.id,
+        message_id=None,
+    )
+
+    index += 1
+
+    if index >= len(questions):
+        summary_lines = [f"Заявка на консультацию: {flow['direction_label']}"]
+        for item in answers_list:
+            summary_lines.append(
+                f"{item['question']}\nОтвет: {item['answer']}"
+            )
+        summary_text = "\n\n".join(summary_lines)
+
+        await UserMemory.add_message(session, user_id, "system", summary_text)
+
+        await state.update_data(
+            questionnaire_index=index,
+            questionnaire_answers=answers_list,
+            questionnaire_summary=summary_text,
+        )
+        await log_event(
+            session,
+            user_id=user_id,
+            chat_id=callback.message.chat.id,
+            username=callback.from_user.username,
+            event="questionnaire_complete",
+            service_key=service_key,
+        )
+        await ui_send_persistent(
+            bot=callback.message.bot,
+            state=state,
+            chat_id=callback.message.chat.id,
+            text=flow["final_text"],
+            reply_markup=lead_actions_keyboard(service_key),
+            parse_mode=None,
+            persist=True,
+            session=session,
+            user_id=user_id,
+            username=callback.from_user.username,
+        )
+        return
+
+    await state.update_data(
+        questionnaire_index=index, questionnaire_answers=answers_list
+    )
+    await _render_service_question(
+        bot=callback.message.bot,
+        state=state,
+        chat_id=callback.message.chat.id,
+        prefer_message_id=callback.message.message_id,
+        title=f"SRVT • {SERVICES.get(service_key, service_key)}",
+        step=index + 1,
+        total=len(questions),
+        question=questions[index],
+        back_cb="q:back",
+        persist=True,
+        session=session,
+        user_id=user_id,
+        username=callback.from_user.username,
     )

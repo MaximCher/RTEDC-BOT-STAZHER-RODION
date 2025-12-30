@@ -29,6 +29,36 @@ def flow_nav_keyboard(back_callback_data: str | None = None) -> InlineKeyboardMa
     )
 
 
+def flow_nav_with_choices_keyboard(
+    *,
+    back_callback_data: str | None,
+    choices: list[str],
+    choice_callback_prefix: str,
+) -> InlineKeyboardMarkup:
+    """
+    Render 2–3 "quick answer" buttons above the standard navigation.
+
+    - choices are shown as "clouds" (2 per row when possible)
+    - navigation buttons remain full-width and stable (1 per row)
+    """
+    rows: list[list[InlineKeyboardButton]] = []
+    if choices:
+        row: list[InlineKeyboardButton] = []
+        for i, ch in enumerate(choices):
+            row.append(
+                InlineKeyboardButton(
+                    text=ch, callback_data=f"{choice_callback_prefix}:{i}"
+                )
+            )
+            if len(row) == 2:
+                rows.append(row)
+                row = []
+        if row:
+            rows.append(row)
+    rows += flow_nav_keyboard(back_callback_data).inline_keyboard
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def lead_actions_keyboard(service_key: str) -> InlineKeyboardMarkup:
     # UX: keep CTAs stable — 1 button per row (avoid narrow "two-column" layouts).
     rows = [
