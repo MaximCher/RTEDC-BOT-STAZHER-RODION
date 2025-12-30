@@ -5,6 +5,7 @@ from datetime import datetime
 from aiogram import F, Router
 from aiogram.filters import CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
     CallbackQuery,
     KeyboardButton,
@@ -31,6 +32,10 @@ from src.utils.service_entry import entry_screen_for_service
 from src.utils.webapp_url import get_webapp_public_url
 
 router = Router()
+
+
+class ContactRequest(StatesGroup):
+    waiting_for_contact = State()
 
 
 async def _ask_contact_enabled(session: AsyncSession) -> bool:
@@ -93,7 +98,7 @@ async def _check_gate(
 
 
 async def _maybe_request_contact(
-    message: Message, session: AsyncSession
+    message: Message, state: FSMContext, session: AsyncSession
 ) -> bool:
     """
     Ask user to share contact via ReplyKeyboard (Telegram requires explicit user action).
@@ -104,6 +109,12 @@ async def _maybe_request_contact(
     um = await UserMemory.get_or_create(session, message.from_user.id)
     if um.phone:
         return False
+
+    # Enter a dedicated state so we don't block other FSM flows with catch-all handlers.
+    try:
+        await state.set_state(ContactRequest.waiting_for_contact)
+    except Exception:
+        pass
 
     kb = ReplyKeyboardMarkup(
         keyboard=[
@@ -166,7 +177,7 @@ async def _render_menu(
         return
 
     # Optional: ask contact right after access check
-    requested = await _maybe_request_contact(message, session)
+    requested = await _maybe_request_contact(message, state, session)
     if requested:
         return
 
@@ -296,7 +307,7 @@ async def back_to_menu(
 
 @router.callback_query(F.data == "menu:new")
 async def open_menu_new_message(
-    callback: CallbackQuery, session: AsyncSession
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession
 ) -> None:
     """Open menu without editing/deleting the current message (keeps important info in history)."""
     # UX: keep Telegram "loading" animation on the pressed button.
@@ -311,7 +322,7 @@ async def open_menu_new_message(
             gate_text(missing), reply_markup=gate_keyboard(missing)
         )
     else:
-        requested = await _maybe_request_contact(callback.message, session)
+        requested = await _maybe_request_contact(callback.message, state, session)
         if not requested:
             await callback.message.answer(
                 msg("welcome"), reply_markup=services_keyboard()
@@ -350,7 +361,7 @@ async def gate_check(
         return
 
     # Access ok — ask contact (optional) or show menu
-    requested = await _maybe_request_contact(callback.message, session)
+    requested = await _maybe_request_contact(callback.message, state, session)
     if requested:
         try:
             await callback.answer("Доступ подтверждён ✅", cache_time=1)
@@ -390,22 +401,23 @@ async def on_contact_shared(
     await message.answer("Спасибо! ✅", reply_markup=ReplyKeyboardRemove())
     await _render_menu(message, state, session)
 
-
-@router.message()
-async def enforce_contact_required(
+@router.message(ContactRequest.waiting_for_contact)
+async def contact_required_repeat(
     message: Message, state: FSMContext, session: AsyncSession
 ) -> None:
     """
-    If "ask contact on start" is enabled and user has no phone yet, contact sharing is mandatory.
-    Any user message (except a Contact message) will re-trigger the contact request.
+    While waiting for mandatory contact, ignore normal messages and keep prompting.
+    This must NOT intercept other FSM flows.
     """
-    # Ignore contact messages (handled above)
     if message.contact is not None:
         return
     if not await _ask_contact_enabled(session):
+        await state.clear()
+        await _render_menu(message, state, session)
         return
     um = await UserMemory.get_or_create(session, message.from_user.id)
     if um.phone:
+        await _render_menu(message, state, session)
         return
     allowed, missing, _ = await _check_gate(
         bot=message.bot, session=session, user_id=message.from_user.id
@@ -413,8 +425,32 @@ async def enforce_contact_required(
     if not allowed:
         await message.answer(gate_text(missing), reply_markup=gate_keyboard(missing))
         return
-    # Mandatory contact: keep asking until user shares it
-    await _maybe_request_contact(message, session)
+    await _maybe_request_contact(message, state, session)
+
+
+@router.callback_query(ContactRequest.waiting_for_contact)
+async def contact_required_block_callbacks(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    """
+    Prevent using the bot via old inline buttons until contact is shared.
+    """
+    um = await UserMemory.get_or_create(session, callback.from_user.id)
+    if um.phone:
+        await state.clear()
+        await callback.answer()
+        return
+    try:
+        await callback.answer(
+            "Сначала поделитесь контактом (кнопка «📲 Поделиться контактом»).",
+            show_alert=True,
+        )
+    except Exception:
+        pass
+    try:
+        await _maybe_request_contact(callback.message, state, session)
+    except Exception:
+        pass
 
 
 @router.callback_query(F.data.startswith("entry:new:"))

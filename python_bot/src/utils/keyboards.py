@@ -255,25 +255,31 @@ def staff_ticket_keyboard(ticket_id: int) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text="✅ Взять в работу",
                     callback_data=f"staff:ticket:claim:{ticket_id}",
-                ),
+                )
+            ],
+            [
                 InlineKeyboardButton(
                     text="💬 Запросить чат",
                     callback_data=f"staff:ticket:request_chat:{ticket_id}",
-                ),
+                )
             ],
             [
                 InlineKeyboardButton(
                     text="🗂 Открыть чат",
                     callback_data=f"staff:ticket:open:{ticket_id}",
-                ),
+                )
+            ],
+            [
                 InlineKeyboardButton(
                     text="🔁 Передать",
                     callback_data=f"staff:ticket:transfer:{ticket_id}",
-                ),
+                )
+            ],
+            [
                 InlineKeyboardButton(
                     text="✅ Закрыть",
                     callback_data=f"staff:ticket:close:{ticket_id}",
-                ),
+                )
             ],
         ]
     )
