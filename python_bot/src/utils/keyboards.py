@@ -5,10 +5,26 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from src.config import SERVICES
 
 
+_BTN_PAD = "⠀"  # U+2800 braille blank (renders as empty but counts for width)
+
+
+def _pad_btn(text: str, min_len: int = 20) -> str:
+    """
+    Telegram can render inline keyboards "narrow" when button texts are short.
+    Padding with invisible characters stabilizes keyboard width across screens.
+    """
+    t = text or ""
+    if len(t) >= min_len:
+        return t
+    return t + (_BTN_PAD * (min_len - len(t)))
+
+
 def services_keyboard() -> InlineKeyboardMarkup:
     rows = []
     for key, label in SERVICES.items():
-        rows.append([InlineKeyboardButton(text=label, callback_data=f"service:{key}")])
+        rows.append(
+            [InlineKeyboardButton(text=_pad_btn(label), callback_data=f"service:{key}")]
+        )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -24,8 +40,16 @@ def flow_nav_keyboard(back_callback_data: str | None = None) -> InlineKeyboardMa
     # (1 button per row prevents "jumping" between wide and narrow layouts).
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ Назад", callback_data=back_cb)],
-            [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:new")],
+            [
+                InlineKeyboardButton(
+                    text=_pad_btn("⬅️ Назад"), callback_data=back_cb
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_pad_btn("⬅️ В меню"), callback_data="menu:new"
+                )
+            ],
         ]
     )
 
@@ -48,7 +72,8 @@ def flow_nav_with_choices_keyboard(
             rows.append(
                 [
                 InlineKeyboardButton(
-                    text=ch, callback_data=f"{choice_callback_prefix}:{i}"
+                        text=_pad_btn(ch),
+                        callback_data=f"{choice_callback_prefix}:{i}",
                 )
                 ]
             )
@@ -61,7 +86,7 @@ def lead_actions_keyboard(service_key: str) -> InlineKeyboardMarkup:
     rows = [
         [
             InlineKeyboardButton(
-                text="📩 Заявка на консультацию",
+                text=_pad_btn("📩 Заявка на консультацию"),
                 callback_data=f"lead:start:{service_key}",
             )
         ]
@@ -70,14 +95,18 @@ def lead_actions_keyboard(service_key: str) -> InlineKeyboardMarkup:
         rows.append(
             [
                 InlineKeyboardButton(
-                    text="🔎 Вопрос по субсидиям",
+                    text=_pad_btn("🔎 Вопрос по субсидиям"),
                     callback_data=f"subsidy:chat:start:{service_key}",
                 )
             ]
         )
     rows += [
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"entry:new:{service_key}")],
-        [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:new")],
+        [
+            InlineKeyboardButton(
+                text=_pad_btn("⬅️ Назад"), callback_data=f"entry:new:{service_key}"
+            )
+        ],
+        [InlineKeyboardButton(text=_pad_btn("⬅️ В меню"), callback_data="menu:new")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
