@@ -5,7 +5,22 @@ from typing import List
 
 
 _PARENS_RE = re.compile(r"\(([^()]*)\)")
-_SLASH_SPLIT_RE = re.compile(r"\s*/\s*")
+
+# Telegram/typography may use different "slash-like" chars.
+# Normalize them and split by any of them.
+_SLASH_CHARS = "/／∕⁄"
+_SLASH_SPLIT_RE = re.compile(rf"\s*[{re.escape(_SLASH_CHARS)}]\s*")
+
+
+def _normalize_separators(text: str) -> str:
+    if not text:
+        return ""
+    # Map common slash variants to ASCII "/"
+    return (
+        text.replace("／", "/")
+        .replace("∕", "/")
+        .replace("⁄", "/")
+    )
 
 
 def extract_quick_choices(question_text: str) -> List[str]:
@@ -15,7 +30,7 @@ def extract_quick_choices(question_text: str) -> List[str]:
     We intentionally only return choices when the set is small (2–3) to avoid
     overwhelming the user or creating misleading "suggestions" for free-form inputs.
     """
-    raw = (question_text or "").strip()
+    raw = _normalize_separators((question_text or "").strip())
     if not raw:
         return []
 
@@ -38,6 +53,7 @@ def extract_quick_choices(question_text: str) -> List[str]:
         candidates.append(raw)
 
     for cand in candidates:
+        cand = _normalize_separators(cand)
         if "/" not in cand:
             continue
         parts = [
