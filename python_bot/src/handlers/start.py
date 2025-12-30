@@ -106,9 +106,19 @@ async def _maybe_request_contact(
     """
     if not await _ask_contact_enabled(session):
         return False
-    um = await UserMemory.get_or_create(session, message.from_user.id)
-    if um.phone:
+
+    # Requirement: ask contact only for a brand-new user (not yet in DB).
+    # Existing users should not be asked again.
+    um = (
+        await session.execute(
+            select(UserMemory).where(UserMemory.user_id == message.from_user.id)
+        )
+    ).scalar_one_or_none()
+    if um is not None:
         return False
+
+    # Create record for the new user
+    um = await UserMemory.get_or_create(session, message.from_user.id)
 
     # Enter a dedicated state so we don't block other FSM flows with catch-all handlers.
     try:
@@ -397,6 +407,11 @@ async def on_contact_shared(
             phone=phone,
             full_name=message.from_user.full_name,
         )
+        # Ensure the phone is visible within this handler before we render menu again.
+        try:
+            await session.flush()
+        except Exception:
+            pass
     # Hide reply keyboard and show menu
     await message.answer("Спасибо! ✅", reply_markup=ReplyKeyboardRemove())
     await _render_menu(message, state, session)
