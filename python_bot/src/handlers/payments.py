@@ -18,7 +18,6 @@ from src.utils.keyboards import (
 )
 from src.utils.service_entry import entry_screen_for_service
 from src.utils.ui_flow import format_step, ui_send_persistent, ui_upsert
-from src.utils.quick_choices import extract_quick_choices
 
 router = Router()
 
@@ -71,9 +70,7 @@ async def _render_payments_step(
     explicit: dict[str, list[str]] = {
         "direction": ["отправить", "получить"],
     }
-    choices = explicit.get(question_key or "", []) or extract_quick_choices(
-        question
-    )
+    choices = explicit.get(question_key or "", [])
     if choices:
         await state.update_data(qc_ctx="payments", qc_choices=choices)
         kb = flow_nav_with_choices_keyboard(

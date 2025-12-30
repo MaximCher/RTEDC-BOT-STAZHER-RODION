@@ -18,7 +18,6 @@ from src.utils.keyboards import (
 )
 from src.utils.ui_flow import format_step, ui_upsert, ui_send_persistent
 from src.utils.service_entry import entry_screen_for_service
-from src.utils.quick_choices import extract_quick_choices
 
 router = Router()
 
@@ -64,9 +63,7 @@ async def _render_logistics_step(
     explicit: dict[str, list[str]] = {
         "timeline": ["сейчас", "1–2 недели", "месяц+"],
     }
-    choices = explicit.get(question_key or "", []) or extract_quick_choices(
-        question
-    )
+    choices = explicit.get(question_key or "", [])
     if choices:
         await state.update_data(qc_ctx="logistics", qc_choices=choices)
         kb = flow_nav_with_choices_keyboard(

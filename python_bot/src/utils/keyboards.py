@@ -38,23 +38,19 @@ def flow_nav_with_choices_keyboard(
     """
     Render 2–3 "quick answer" buttons above the standard navigation.
 
-    - choices are shown as "clouds" (2 per row when possible)
+    - choices are shown as full-width (1 per row) to keep button sizing consistent
     - navigation buttons remain full-width and stable (1 per row)
     """
     rows: list[list[InlineKeyboardButton]] = []
     if choices:
-        row: list[InlineKeyboardButton] = []
         for i, ch in enumerate(choices):
-            row.append(
+            rows.append(
+                [
                 InlineKeyboardButton(
                     text=ch, callback_data=f"{choice_callback_prefix}:{i}"
                 )
+                ]
             )
-            if len(row) == 2:
-                rows.append(row)
-                row = []
-        if row:
-            rows.append(row)
     rows += flow_nav_keyboard(back_callback_data).inline_keyboard
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

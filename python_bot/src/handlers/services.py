@@ -25,7 +25,6 @@ from src.utils.keyboards import (
 from src.utils.messages import msg
 from src.utils.service_entry import entry_screen_for_service
 from src.utils.ui_flow import format_step, ui_send_persistent, ui_upsert
-from src.utils.quick_choices import extract_quick_choices
 
 router = Router()
 
@@ -51,17 +50,10 @@ async def _render_service_question(
     user_id: int | None = None,
     username: str | None = None,
 ) -> None:
-    choices = extract_quick_choices(question)
-    if choices:
-        await state.update_data(qc_ctx="service_q", qc_choices=choices)
-        kb = flow_nav_with_choices_keyboard(
-            back_callback_data=back_cb,
-            choices=choices,
-            choice_callback_prefix="qc:service_q",
-        )
-    else:
-        await state.update_data(qc_ctx="", qc_choices=[])
-        kb = flow_nav_keyboard(back_cb)
+    # Service questionnaire questions are mostly free-form; do not auto-generate
+    # quick choices from text (it can create misleading buttons like "куда/откуда").
+    await state.update_data(qc_ctx="", qc_choices=[])
+    kb = flow_nav_keyboard(back_cb)
 
     await ui_upsert(
         bot=bot,

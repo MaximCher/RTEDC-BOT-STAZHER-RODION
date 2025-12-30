@@ -31,7 +31,6 @@ from src.utils.keyboards import (
 from src.utils.ui_flow import format_step, ui_upsert
 from src.utils.ui_flow import ui_send_persistent
 from src.utils.service_entry import entry_screen_for_service
-from src.utils.quick_choices import extract_quick_choices
 from src.vector_store import VectorStore
 
 router = Router()
@@ -94,9 +93,7 @@ async def _render_subsidy_calc_step(
     explicit: dict[str, list[str]] = {
         "export": ["да", "нет"],
     }
-    choices = explicit.get(question_key or "", []) or extract_quick_choices(
-        question
-    )
+    choices = explicit.get(question_key or "", [])
     if choices:
         await state.update_data(qc_ctx="subsidy_calc", qc_choices=choices)
         kb = flow_nav_with_choices_keyboard(
