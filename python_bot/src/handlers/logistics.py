@@ -7,7 +7,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.models.dialog_message import DialogMessage
 from src.models.user_memory import UserMemory
 from src.utils.funnel import log_event
@@ -16,8 +15,8 @@ from src.utils.keyboards import (
     flow_nav_with_choices_keyboard,
     lead_actions_keyboard,
 )
-from src.utils.ui_flow import format_step, ui_upsert, ui_send_persistent
 from src.utils.service_entry import entry_screen_for_service
+from src.utils.ui_flow import format_step, ui_send_persistent, ui_upsert
 
 router = Router()
 
@@ -113,7 +112,9 @@ async def _process_logistics_answer_text(
     step = int(data.get("log_step", 0))
     answers: Dict[str, str] = dict(data.get("log_answers") or {})
     service_key = (
-        data.get("service_key") if isinstance(data.get("service_key"), str) else "logistics_ved"
+        data.get("service_key")
+        if isinstance(data.get("service_key"), str)
+        else "logistics_ved"
     )
 
     if step < 0 or step >= len(_LOG_QUESTIONS):
@@ -141,7 +142,9 @@ async def _process_logistics_answer_text(
 
     answers[key] = t[:700]
 
-    await UserMemory.add_message(session, user_id, "user", f"{q_text}\nОтвет: {t}")
+    await UserMemory.add_message(
+        session, user_id, "user", f"{q_text}\nОтвет: {t}"
+    )
     await DialogMessage.create(
         session,
         user_id=user_id,
@@ -219,7 +222,9 @@ async def _process_logistics_answer_text(
 
 
 @router.callback_query(F.data == "logistics:quote:back")
-async def logistics_quote_back(callback: CallbackQuery, state: FSMContext) -> None:
+async def logistics_quote_back(
+    callback: CallbackQuery, state: FSMContext
+) -> None:
     current = await state.get_state()
     if current != LogisticsQuote.waiting_for_answer.state:
         await callback.answer()
@@ -228,7 +233,11 @@ async def logistics_quote_back(callback: CallbackQuery, state: FSMContext) -> No
     data = await state.get_data()
     step = int(data.get("log_step", 0))
     answers: Dict[str, str] = dict(data.get("log_answers") or {})
-    service_key = data.get("service_key") if isinstance(data.get("service_key"), str) else "logistics_ved"
+    service_key = (
+        data.get("service_key")
+        if isinstance(data.get("service_key"), str)
+        else "logistics_ved"
+    )
 
     if step <= 0:
         await state.clear()
@@ -267,13 +276,19 @@ async def logistics_quote_back(callback: CallbackQuery, state: FSMContext) -> No
 
 
 @router.callback_query(F.data.startswith("logistics:quote:start:"))
-async def start_logistics_quote(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
-    service_key = (callback.data or "").split("logistics:quote:start:", 1)[-1].strip()
+async def start_logistics_quote(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    service_key = (
+        (callback.data or "").split("logistics:quote:start:", 1)[-1].strip()
+    )
     if not service_key:
         service_key = "logistics_ved"
 
     await state.set_state(LogisticsQuote.waiting_for_answer)
-    await state.update_data(service_key=service_key, log_step=0, log_answers={})
+    await state.update_data(
+        service_key=service_key, log_step=0, log_answers={}
+    )
 
     await log_event(
         session,
@@ -343,7 +358,9 @@ async def logistics_quick_choice(
 
 
 @router.message(LogisticsQuote.waiting_for_answer)
-async def handle_logistics_quote_answer(message: Message, state: FSMContext, session: AsyncSession) -> None:
+async def handle_logistics_quote_answer(
+    message: Message, state: FSMContext, session: AsyncSession
+) -> None:
     await _process_logistics_answer_text(
         text=message.text or "",
         bot=message.bot,
@@ -354,5 +371,3 @@ async def handle_logistics_quote_answer(message: Message, state: FSMContext, ses
         username=message.from_user.username,
         user_message_id=message.message_id,
     )
-
-
