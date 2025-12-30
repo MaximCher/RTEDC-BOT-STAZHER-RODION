@@ -82,6 +82,7 @@ async def ui_upsert(
     """
     data = await state.get_data()
     msg_id = data.get(UI_MESSAGE_ID_KEY)
+    ui_mode = data.get(UI_MODE_KEY)
     if keep_at_bottom:
         # Always create a fresh message to keep UI close to the input,
         # then best-effort delete the previous UI message.
@@ -123,7 +124,14 @@ async def ui_upsert(
         candidates: list[int] = []
         if isinstance(msg_id, int) and msg_id > 0:
             candidates.append(int(msg_id))
-        if isinstance(prefer_message_id, int) and prefer_message_id > 0:
+        # IMPORTANT: never delete a user-clicked "important" message.
+        # After ui_send_persistent() we set UI_MODE_KEY="persistent" and clear UI_MESSAGE_ID_KEY,
+        # so prefer_message_id can point to an important message (e.g. "Что сделаем дальше").
+        if (
+            ui_mode != "persistent"
+            and isinstance(prefer_message_id, int)
+            and prefer_message_id > 0
+        ):
             candidates.append(int(prefer_message_id))
         for old_id in dict.fromkeys(candidates):  # stable unique
             if old_id <= 0 or old_id == new_id:
