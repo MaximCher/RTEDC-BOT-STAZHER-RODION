@@ -12,12 +12,12 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import declarative_base
+from sqlalchemy.schema import MetaData
 from sqlalchemy.pool import NullPool
 from src.config import settings
 from src.logger import logger
 
-Base = declarative_base()
-Base.metadata.schema = "public"
+Base = declarative_base(metadata=MetaData(schema="public"))
 
 _engine: Optional[AsyncEngine] = None
 _session_factory: Optional[async_sessionmaker[AsyncSession]] = None
