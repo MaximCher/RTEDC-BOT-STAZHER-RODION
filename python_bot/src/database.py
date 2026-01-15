@@ -12,12 +12,11 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import declarative_base
-from sqlalchemy.schema import MetaData
 from sqlalchemy.pool import NullPool
 from src.config import settings
 from src.logger import logger
 
-Base = declarative_base(metadata=MetaData(schema="public"))
+Base = declarative_base()
 
 _engine: Optional[AsyncEngine] = None
 _session_factory: Optional[async_sessionmaker[AsyncSession]] = None
@@ -44,7 +43,6 @@ async def init_db() -> None:
     global _engine, _session_factory
 
     connect_args: dict = {}
-    connect_args["server_settings"] = {"search_path": "public"}
     # Supabase managed Postgres typically requires SSL.
     # asyncpg supports ssl as a string:
     # disable|prefer|allow|require|verify-ca|verify-full (default: prefer).
@@ -74,7 +72,6 @@ async def init_db() -> None:
         poolclass=NullPool,
         pool_pre_ping=True,
         connect_args=connect_args,
-        execution_options={"schema_translate_map": {None: "public"}},
     )
     _session_factory = async_sessionmaker(
         _engine,
