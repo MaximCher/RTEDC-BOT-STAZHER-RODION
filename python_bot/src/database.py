@@ -43,6 +43,7 @@ async def init_db() -> None:
     global _engine, _session_factory
 
     connect_args: dict = {}
+    connect_args["server_settings"] = {"search_path": "public"}
     # Supabase managed Postgres typically requires SSL.
     # asyncpg supports ssl as a string:
     # disable|prefer|allow|require|verify-ca|verify-full (default: prefer).
@@ -83,10 +84,6 @@ async def init_db() -> None:
     from src import models  # noqa: F401
 
     async with _engine.begin() as conn:
-        try:
-            await conn.execute(text("SET search_path TO public"))
-        except Exception:
-            pass
         # Ensure pgvector is available (Supabase requires enabling extension).
         try:
             await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
