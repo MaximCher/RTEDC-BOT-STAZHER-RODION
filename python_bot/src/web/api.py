@@ -332,8 +332,32 @@ def register_api(app: FastAPI) -> None:
             str(service or "unknown"): int(cnt or 0) for service, cnt in leads_by_service_res.all()
         }
         users_by_service = {
-            str(service or "unknown"): int(cnt or 0) for service, cnt in users_by_service_res.all()
+            str(service or "unknown"): int(cnt or 0)
+            for service, cnt in users_by_service_res.all()
         }
+        if not users_by_service:
+            fallback_service_res = await session.execute(
+                text(
+                    """
+                    SELECT
+                      COALESCE(
+                        (params::jsonb ->> 'service'),
+                        (params::jsonb ->> 'service_key'),
+                        action
+                      ) AS service,
+                      COUNT(DISTINCT user_id) AS users
+                    FROM events
+                    WHERE params IS NOT NULL
+                      AND params <> ''
+                      AND params LIKE '{%'
+                    GROUP BY service
+                    """
+                )
+            )
+            users_by_service = {
+                str(service or "unknown"): int(cnt or 0)
+                for service, cnt in fallback_service_res.all()
+            }
 
         return {
             "dialogs_total": dialogs_total,

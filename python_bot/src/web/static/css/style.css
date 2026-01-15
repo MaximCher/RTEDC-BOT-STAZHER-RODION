@@ -84,6 +84,16 @@ code {
   padding-right: 4px;
 }
 
+.scroll-panel {
+  max-height: 360px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.scroll-panel.tight {
+  max-height: 280px;
+}
+
 .msg {
   border-radius: 12px;
   padding: 8px 10px;
