@@ -74,6 +74,7 @@ async def init_db() -> None:
         poolclass=NullPool,
         pool_pre_ping=True,
         connect_args=connect_args,
+        execution_options={"schema_translate_map": {None: "public"}},
     )
     _session_factory = async_sessionmaker(
         _engine,
