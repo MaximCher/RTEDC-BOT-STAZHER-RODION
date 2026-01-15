@@ -83,6 +83,10 @@ async def init_db() -> None:
     from src import models  # noqa: F401
 
     async with _engine.begin() as conn:
+        try:
+            await conn.execute(text("SET search_path TO public"))
+        except Exception:
+            pass
         # Ensure pgvector is available (Supabase requires enabling extension).
         try:
             await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
