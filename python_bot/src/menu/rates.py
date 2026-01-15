@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.legacy.currency_parser import (
+from src.menu.currency_parser import (
     get_cbr_rates,
     get_investing_rates,
     get_profinance_usd_last_selenium,

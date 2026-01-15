@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 """
-Legacy content copied from RTEDC-BOT/main.py to preserve the exact UX/texts.
-Do not "improve wording" here unless explicitly requested: this module is for parity.
+Core content used across the bot UI.
+Keep wording stable unless explicitly requested.
 """
 
-# Services shown in legacy main menu
+# Services shown in main menu
 SERVICES: list[tuple[str, str]] = [
     ("💸 Международные платежи", "service_payments"),
     ("💰 Льготные кредиты", "service_credits"),
@@ -96,15 +96,15 @@ SUBSERVICE_TEXTS: dict[str, str] = {
 }
 
 
-LEGACY_WELCOME_TEXT: str = (
+WELCOME_TEXT: str = (
     "Здравствуйте! Я СРВТ Бот. Помогу узнать об услугах и оставить заявку. Выберите действие:"
 )
 
 
-LEGACY_MENU_TEXT: str = "Главное меню. Выберите действие:"
+MENU_TEXT: str = "Главное меню. Выберите действие:"
 
 
-LEGACY_CLUB_JOIN_INTRO: str = (
+CLUB_JOIN_INTRO: str = (
     "КЛУБ ЭКСПОРТЕРОВ И ИМПОРТЕРОВ СРВТ.РФ (@srvtgroup) создан для прямого общения и обмена опытом между "
     "экспортерами, импортерами, экспертами СРВТ.РФ. Членами могут быть только реальные экспортеры и импортеры. "
     "Чтобы вступить в Клуб пожалуйста ответьте на вопросы ниже."

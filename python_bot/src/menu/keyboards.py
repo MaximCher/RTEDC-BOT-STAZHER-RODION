@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from src.legacy.content import PAYMENTS_SUBSERVICES, SERVICES
+from src.menu.content import PAYMENTS_SUBSERVICES, SERVICES
 
 
-def legacy_main_menu_keyboard() -> InlineKeyboardMarkup:
+def main_menu_keyboard() -> InlineKeyboardMarkup:
     """
-    Legacy main menu layout (2 buttons per row + extra rows).
-    Mirrors bot/utils/keyboards.py in the legacy bot.
+    Main menu layout (2 buttons per row + extra rows).
     """
     keyboard: list[list[InlineKeyboardButton]] = []
     row: list[InlineKeyboardButton] = []
@@ -50,7 +49,7 @@ def legacy_main_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
-def legacy_service_menu_keyboard(
+def service_menu_keyboard(
     extra_rows: list[list[InlineKeyboardButton]] | None = None,
 ) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
@@ -65,7 +64,7 @@ def legacy_service_menu_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def legacy_payments_submenu_keyboard() -> InlineKeyboardMarkup:
+def payments_submenu_keyboard() -> InlineKeyboardMarkup:
     keyboard: list[list[InlineKeyboardButton]] = []
     for name, callback in PAYMENTS_SUBSERVICES:
         keyboard.append(

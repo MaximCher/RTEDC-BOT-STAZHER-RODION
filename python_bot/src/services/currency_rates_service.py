@@ -7,9 +7,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional
 
-from src.legacy.currency_parser import get_cbr_rates, get_investing_rates
-from src.legacy.rates import get_all_rates_table
-from src.legacy.table_image import draw_simple_table
+from src.menu.currency_parser import get_cbr_rates, get_investing_rates
+from src.menu.rates import get_all_rates_table
+from src.menu.table_image import draw_simple_table
 
 
 @dataclass(frozen=True)

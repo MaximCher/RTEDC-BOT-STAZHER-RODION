@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, Optional
 
-# Legacy dashboard compatibility helpers.
-# We keep these as pure functions/constants so web/api stays thin.
+# Dashboard compatibility helpers.
+# Keep these as pure functions/constants so web/api stays thin.
 
 ACTION_LABELS: Dict[str, str] = {
     # Original RTEDC-BOT events
@@ -25,7 +25,7 @@ ACTION_LABELS: Dict[str, str] = {
     "join_request_submitted": "Вступление в клуб: анкета отправлена",
     "join_request_approved": "Вступление в клуб: одобрено",
     "join_request_declined": "Вступление в клуб: отклонено",
-    # Our newer, normalized funnel events (python_bot)
+    # Normalized funnel events (python_bot)
     "entry_service": "Вошли в услугу",
     "engagement_start": "Старт сценария",
     "engagement_complete": "Сценарий завершён",
@@ -37,7 +37,7 @@ ACTION_LABELS: Dict[str, str] = {
 }
 
 SERVICE_LABELS: Dict[str, str] = {
-    # Legacy service ids
+    # Service ids (classic menu)
     "service_payments": "Международные платежи",
     "service_credits": "Льготные кредиты",
     "service_subsidies": "Субсидии",
@@ -82,11 +82,11 @@ def _safe_json(params: Any) -> Optional[Dict[str, Any]]:
 
 def humanize_event(action: str, params: Any) -> str:
     """
-    Human-readable event description, compatible with legacy dashboard.
+    Human-readable event description for the admin dashboard.
     """
     action = str(action or "")
     label = ACTION_LABELS.get(action, action or "event")
-    # If action itself is a service key (legacy), show it as a service selection.
+    # If action itself is a service key, show it as a service selection.
     if action in SERVICE_LABELS and not params:
         return f"Выбор услуги: {SERVICE_LABELS[action]}"
 
@@ -94,7 +94,7 @@ def humanize_event(action: str, params: Any) -> str:
     if not p:
         return label
 
-    # Newer logic used by the legacy dashboard: prefer "label" and optional "value".
+    # Prefer "label" and optional "value" if provided.
     if "label" in p and p.get("label"):
         if p.get("value"):
             return f"{p['label']} — {p['value']}"
@@ -106,7 +106,7 @@ def humanize_event(action: str, params: Any) -> str:
         service_name = SERVICE_LABELS.get(str(service_key), str(service_key))
         return f"{label}: {service_name}"
 
-    # Legacy-specific cases
+    # Service-specific cases
     if action == "service_select":
         service = p.get("service")
         service_name = SERVICE_LABELS.get(str(service), service)

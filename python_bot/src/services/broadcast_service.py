@@ -23,7 +23,7 @@ async def broadcast_loop(
 
     Mirrors RTEDC-BOT/main.py broadcast_worker():
     - every 30s checks broadcast where sent=0 and send_at <= NOW()
-    - sends text to all users from legacy `users` table
+    - sends text to all users from `users` table
     - marks broadcast row as sent=1
     """
     while True:

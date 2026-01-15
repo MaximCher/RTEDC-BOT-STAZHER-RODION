@@ -24,7 +24,7 @@ async def log_event(
     Store funnel events in dialog_messages so admin stats can query them easily.
     (No new tables/migrations required.)
     """
-    # Keep payload flat for compatibility with the legacy dashboard
+    # Keep payload flat for dashboard compatibility
     # which expects keys like "label", "service", "step", etc. at top level.
     payload: Dict[str, Any] = {"event": event}
     if service_key:
@@ -47,8 +47,7 @@ async def log_event(
         message_id=None,
     )
 
-    # Also write into legacy dashboard tables (users/events) to keep
-    # RTEDC-BOT/dashboard working during migration.
+    # Also write into dashboard tables (users/events) for analytics compatibility.
     try:
         now = datetime.now(timezone.utc)
         await session.execute(

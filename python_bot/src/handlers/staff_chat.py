@@ -13,7 +13,7 @@ from src.models.dialog_message import DialogMessage
 from src.models.lead_ticket import LeadTicket
 from src.models.staff import StaffMember
 from src.services.staff_service import is_admin, is_staff, touch_staff_profile
-from src.legacy.keyboards import legacy_main_menu_keyboard
+from src.menu.keyboards import main_menu_keyboard
 from src.utils.keyboards import (
     lead_chat_active_keyboard,
     lead_chat_request_keyboard,
@@ -310,7 +310,7 @@ async def staff_close_ticket(callback: CallbackQuery, state: FSMContext, session
         await callback.message.bot.send_message(
             chat_id=ticket.lead_chat_id,
             text="Консультация закрыта. Если появятся новые вопросы — нажмите /start и выберите услугу.",
-            reply_markup=legacy_main_menu_keyboard(),
+            reply_markup=main_menu_keyboard(),
         )
     except Exception:
         pass

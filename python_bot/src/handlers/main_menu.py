@@ -19,21 +19,21 @@ from aiogram.types import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.config import settings
-from src.legacy.content import (
+from src.menu.content import (
+    CLUB_JOIN_INTRO,
     EVENT_INFO,
-    LEGACY_CLUB_JOIN_INTRO,
-    LEGACY_MENU_TEXT,
-    LEGACY_WELCOME_TEXT,
+    MENU_TEXT,
     SERVICE_DESCRIPTIONS,
     SUBSERVICE_TEXTS,
+    WELCOME_TEXT,
 )
-from src.legacy.keyboards import (
-    legacy_main_menu_keyboard,
-    legacy_payments_submenu_keyboard,
-    legacy_service_menu_keyboard,
+from src.menu.keyboards import (
+    main_menu_keyboard,
+    payments_submenu_keyboard,
+    service_menu_keyboard,
 )
-from src.legacy.rates import get_all_rates_table
-from src.legacy.table_image import draw_simple_table
+from src.menu.rates import get_all_rates_table
+from src.menu.table_image import draw_simple_table
 from src.models.required_subscription import RequiredSubscription
 from src.models.user_memory import UserMemory
 from src.services.currency_rates_service import (
@@ -91,19 +91,19 @@ async def _check_gate(
     return len(missing) == 0, missing
 
 
-class LegacyApplyForm(StatesGroup):
+class ApplyForm(StatesGroup):
     name = State()
     company = State()
     description = State()
 
 
-class LegacyClubForm(StatesGroup):
+class ClubForm(StatesGroup):
     fio = State()
     company = State()
     expectations = State()
 
 
-class LegacyJoinRequestForm(StatesGroup):
+class JoinRequestForm(StatesGroup):
     full_name = State()
     position = State()
     company = State()
@@ -119,7 +119,7 @@ def _primary_manager_chat_id() -> Optional[int]:
 
 
 @router.callback_query(F.data == "back_to_main")
-async def legacy_back_to_main(
+async def menu_back_to_main(
     callback: CallbackQuery, session: AsyncSession
 ) -> None:
     await log_event(
@@ -138,7 +138,7 @@ async def legacy_back_to_main(
 
 
 @router.callback_query(F.data.startswith("service_"))
-async def legacy_service_select(
+async def menu_service_select(
     callback: CallbackQuery, session: AsyncSession
 ) -> None:
     allowed, missing = await _check_gate(
@@ -156,7 +156,7 @@ async def legacy_service_select(
             pass
         return
     data = (callback.data or "").strip()
-    # Persist topic for the "apply" form like the legacy bot did.
+    # Persist topic for the "apply" form.
     await UserMemory.update_user_data(
         session, callback.from_user.id, selected_service=data
     )
@@ -181,7 +181,7 @@ async def legacy_service_select(
             )
         ]
 
-    # Map legacy items → новые калькуляторы (без общего хаба).
+    # Map menu items → новые калькуляторы (без общего хаба).
     mapped_buttons: list[list[InlineKeyboardButton]] = []
     if data == "service_payments":
         mapped_buttons.append(
@@ -189,7 +189,7 @@ async def legacy_service_select(
                 "⚡️ Оценить платеж / калькулятор", "international_payments"
             )
         )
-        kb = legacy_payments_submenu_keyboard()
+        kb = payments_submenu_keyboard()
         kb.inline_keyboard.insert(0, mapped_buttons[0])
     elif data == "service_subsidies":
         mapped_buttons.append(
@@ -197,22 +197,22 @@ async def legacy_service_select(
                 "⚡️ Рассчитать субсидии/финансирование", "subsidies_financing"
             )
         )
-        kb = legacy_service_menu_keyboard(extra_rows=mapped_buttons)
+        kb = service_menu_keyboard(extra_rows=mapped_buttons)
     elif data == "service_logistics":
         mapped_buttons.append(
             _service_btn("⚡️ Рассчитать логистику", "logistics_ved")
         )
-        kb = legacy_service_menu_keyboard(extra_rows=mapped_buttons)
+        kb = service_menu_keyboard(extra_rows=mapped_buttons)
     elif data == "service_check":
         mapped_buttons.append(
             _service_btn("⚡️ Аналитика / проверка ВЭД", "analytics_tnved")
         )
-        kb = legacy_service_menu_keyboard(extra_rows=mapped_buttons)
+        kb = service_menu_keyboard(extra_rows=mapped_buttons)
     elif data == "service_translate":
         # Нет отдельного калькулятора — оставляем заявку.
-        kb = legacy_service_menu_keyboard()
+        kb = service_menu_keyboard()
     else:
-        kb = legacy_service_menu_keyboard()
+        kb = service_menu_keyboard()
 
     try:
         await callback.message.edit_text(text, reply_markup=kb)
@@ -225,7 +225,7 @@ async def legacy_service_select(
 
 
 @router.callback_query(F.data.startswith("sub_payments_"))
-async def legacy_subservice_select(
+async def menu_subservice_select(
     callback: CallbackQuery, session: AsyncSession
 ) -> None:
     allowed, missing = await _check_gate(
@@ -287,7 +287,7 @@ async def legacy_subservice_select(
 
 
 @router.callback_query(F.data == "apply")
-async def legacy_apply_start(
+async def menu_apply_start(
     callback: CallbackQuery, state: FSMContext, session: AsyncSession
 ) -> None:
     """
@@ -300,7 +300,7 @@ async def legacy_apply_start(
         chat_id=callback.message.chat.id,
         username=callback.from_user.username,
         event="cta_lead_start",
-        meta={"label": "Заявка на консультацию (legacy apply)"},
+        meta={"label": "Заявка на консультацию"},
     )
     await state.clear()
     await ui_upsert(
@@ -322,8 +322,8 @@ async def legacy_apply_start(
         pass
 
 
-@router.message(LegacyApplyForm.name)
-async def legacy_apply_name(
+@router.message(ApplyForm.name)
+async def menu_apply_name(
     message: Message, state: FSMContext, session: AsyncSession
 ) -> None:
     # Safety net: if someone is stuck in the old FSM state, route them into the new lead flow.
@@ -333,8 +333,8 @@ async def legacy_apply_name(
     )
 
 
-@router.message(LegacyApplyForm.company)
-async def legacy_apply_company(
+@router.message(ApplyForm.company)
+async def menu_apply_company(
     message: Message, state: FSMContext, session: AsyncSession
 ) -> None:
     await state.clear()
@@ -343,8 +343,8 @@ async def legacy_apply_company(
     )
 
 
-@router.message(LegacyApplyForm.description)
-async def legacy_apply_description(
+@router.message(ApplyForm.description)
+async def menu_apply_description(
     message: Message, state: FSMContext, session: AsyncSession
 ) -> None:
     await state.clear()
@@ -354,7 +354,7 @@ async def legacy_apply_description(
 
 
 @router.callback_query(F.data == "srvtevents")
-async def legacy_events(
+async def menu_events(
     callback: CallbackQuery, session: AsyncSession
 ) -> None:
     allowed, missing = await _check_gate(
@@ -424,7 +424,7 @@ async def legacy_events(
 
 
 @router.callback_query(F.data == "currency_rates")
-async def legacy_currency_rates(
+async def menu_currency_rates(
     callback: CallbackQuery, state: FSMContext, session: AsyncSession
 ) -> None:
     allowed, missing = await _check_gate(
@@ -459,7 +459,7 @@ async def legacy_currency_rates(
         event="currency_view",
         meta={"label": "Просмотр курсов валют"},
     )
-    # UX improvement vs legacy: show fast text instantly; image is available on-demand.
+    # UX improvement: show fast text instantly; image is available on-demand.
     try:
         snap = await get_fast_snapshot()
         await ensure_full_refresh()
@@ -521,7 +521,7 @@ async def legacy_currency_rates(
 
 
 @router.callback_query(F.data == "currency:image")
-async def legacy_currency_image(
+async def menu_currency_image(
     callback: CallbackQuery, state: FSMContext, session: AsyncSession
 ) -> None:
     allowed, missing = await _check_gate(
@@ -558,7 +558,7 @@ async def legacy_currency_image(
         meta={"label": "Просмотр курсов валют (картинка)"},
     )
 
-    # Immediate feedback, like legacy main.py (spinner -> message).
+    # Immediate feedback (spinner -> message).
     try:
         await callback.answer()
     except Exception:
@@ -639,7 +639,7 @@ async def legacy_currency_image(
 
 
 @router.message(Command("currency"))
-async def legacy_currency_command(
+async def menu_currency_command(
     message: Message, session: AsyncSession
 ) -> None:
     # Handler moved to src.handlers.start (gate-aware). Keep as no-op fallback.
@@ -647,7 +647,7 @@ async def legacy_currency_command(
 
 
 @router.callback_query(F.data == "join_club")
-async def legacy_join_club_start(
+async def menu_join_club_start(
     callback: CallbackQuery, state: FSMContext, session: AsyncSession
 ) -> None:
     allowed, missing = await _check_gate(
@@ -672,17 +672,17 @@ async def legacy_join_club_start(
         event="club_join_start",
         meta={"label": "Начало вступления в клуб"},
     )
-    await callback.message.answer(LEGACY_CLUB_JOIN_INTRO)
+    await callback.message.answer(CLUB_JOIN_INTRO)
     await callback.message.answer("Ваше ФИО:")
-    await state.set_state(LegacyClubForm.fio)
+    await state.set_state(ClubForm.fio)
     try:
         await callback.answer()
     except Exception:
         pass
 
 
-@router.message(LegacyClubForm.fio)
-async def legacy_join_club_fio(
+@router.message(ClubForm.fio)
+async def menu_join_club_fio(
     message: Message, state: FSMContext, session: AsyncSession
 ) -> None:
     await log_event(
@@ -695,11 +695,11 @@ async def legacy_join_club_fio(
     )
     await state.update_data(fio=message.text)
     await message.answer("Название вашей компании и сайт:")
-    await state.set_state(LegacyClubForm.company)
+    await state.set_state(ClubForm.company)
 
 
-@router.message(LegacyClubForm.company)
-async def legacy_join_club_company(
+@router.message(ClubForm.company)
+async def menu_join_club_company(
     message: Message, state: FSMContext, session: AsyncSession
 ) -> None:
     await log_event(
@@ -716,11 +716,11 @@ async def legacy_join_club_company(
     )
     await state.update_data(company=message.text)
     await message.answer("Ваши ожидания от членства в КЛУБЕ:")
-    await state.set_state(LegacyClubForm.expectations)
+    await state.set_state(ClubForm.expectations)
 
 
-@router.message(LegacyClubForm.expectations)
-async def legacy_join_club_expectations(
+@router.message(ClubForm.expectations)
+async def menu_join_club_expectations(
     message: Message, state: FSMContext, session: AsyncSession
 ) -> None:
     await log_event(
@@ -755,18 +755,18 @@ async def legacy_join_club_expectations(
         "Ваша заявка принята и менеджер свяжется с вами по итогам рассмотрения или добавит в группу Клуба!"
     )
     await message.answer(
-        LEGACY_MENU_TEXT, reply_markup=legacy_main_menu_keyboard()
+        MENU_TEXT, reply_markup=main_menu_keyboard()
     )
     await state.clear()
 
 
 # ============================================================
-# Chat join request flow (legacy)
+# Chat join request flow
 # ============================================================
 
 
 @router.message(Command("join"))
-async def legacy_join_command(
+async def menu_join_command(
     message: Message, state: FSMContext, session: AsyncSession
 ) -> None:
     """
@@ -782,11 +782,11 @@ async def legacy_join_command(
         return
     await state.clear()
     await message.answer("Ваша фамилия, имя, отчество?")
-    await state.set_state(LegacyJoinRequestForm.full_name)
+    await state.set_state(JoinRequestForm.full_name)
 
 
 @router.chat_join_request()
-async def legacy_chat_join_request(
+async def menu_chat_join_request(
     event: ChatJoinRequest, session: AsyncSession
 ) -> None:
     # Only handle join requests to configured main group
@@ -826,7 +826,7 @@ async def legacy_chat_join_request(
 
 
 @router.callback_query(F.data == "start_join_form")
-async def legacy_start_join_form(
+async def menu_start_join_form(
     callback: CallbackQuery, state: FSMContext, session: AsyncSession
 ) -> None:
     allowed, missing = await _check_gate(
@@ -845,53 +845,53 @@ async def legacy_start_join_form(
         return
     await callback.answer()
     await callback.message.edit_text("Ваша фамилия, имя, отчество?")
-    await state.set_state(LegacyJoinRequestForm.full_name)
+    await state.set_state(JoinRequestForm.full_name)
 
 
-@router.message(LegacyJoinRequestForm.full_name)
-async def legacy_join_full_name(message: Message, state: FSMContext) -> None:
+@router.message(JoinRequestForm.full_name)
+async def menu_join_full_name(message: Message, state: FSMContext) -> None:
     await state.update_data(full_name=message.text)
     await message.answer("Ваша должность?")
-    await state.set_state(LegacyJoinRequestForm.position)
+    await state.set_state(JoinRequestForm.position)
 
 
-@router.message(LegacyJoinRequestForm.position)
-async def legacy_join_position(message: Message, state: FSMContext) -> None:
+@router.message(JoinRequestForm.position)
+async def menu_join_position(message: Message, state: FSMContext) -> None:
     await state.update_data(position=message.text)
     await message.answer("Компания и сайт?")
-    await state.set_state(LegacyJoinRequestForm.company)
+    await state.set_state(JoinRequestForm.company)
 
 
-@router.message(LegacyJoinRequestForm.company)
-async def legacy_join_company(message: Message, state: FSMContext) -> None:
+@router.message(JoinRequestForm.company)
+async def menu_join_company(message: Message, state: FSMContext) -> None:
     await state.update_data(company=message.text)
     await message.answer("Опыт, достижения, чем гордитесь?")
-    await state.set_state(LegacyJoinRequestForm.experience)
+    await state.set_state(JoinRequestForm.experience)
 
 
-@router.message(LegacyJoinRequestForm.experience)
-async def legacy_join_experience(message: Message, state: FSMContext) -> None:
+@router.message(JoinRequestForm.experience)
+async def menu_join_experience(message: Message, state: FSMContext) -> None:
     await state.update_data(experience=message.text)
     await message.answer("Бизнес/индустрия, оборот, сотрудники?")
-    await state.set_state(LegacyJoinRequestForm.business)
+    await state.set_state(JoinRequestForm.business)
 
 
-@router.message(LegacyJoinRequestForm.business)
-async def legacy_join_business(message: Message, state: FSMContext) -> None:
+@router.message(JoinRequestForm.business)
+async def menu_join_business(message: Message, state: FSMContext) -> None:
     await state.update_data(business=message.text)
     await message.answer("Хобби?")
-    await state.set_state(LegacyJoinRequestForm.hobbies)
+    await state.set_state(JoinRequestForm.hobbies)
 
 
-@router.message(LegacyJoinRequestForm.hobbies)
-async def legacy_join_hobbies(message: Message, state: FSMContext) -> None:
+@router.message(JoinRequestForm.hobbies)
+async def menu_join_hobbies(message: Message, state: FSMContext) -> None:
     await state.update_data(hobbies=message.text)
     await message.answer("Ссылки на соцсети?")
-    await state.set_state(LegacyJoinRequestForm.socials)
+    await state.set_state(JoinRequestForm.socials)
 
 
-@router.message(LegacyJoinRequestForm.socials)
-async def legacy_join_socials(
+@router.message(JoinRequestForm.socials)
+async def menu_join_socials(
     message: Message, state: FSMContext, session: AsyncSession
 ) -> None:
     await state.update_data(socials=message.text)
@@ -952,7 +952,7 @@ async def legacy_join_socials(
 
 
 @router.callback_query(F.data.startswith(("approve:", "decline:")))
-async def legacy_join_decision(
+async def menu_join_decision(
     callback: CallbackQuery, session: AsyncSession
 ) -> None:
     data = callback.data or ""
@@ -980,7 +980,7 @@ async def legacy_join_decision(
             await callback.answer(f"Ошибка: {e}", show_alert=True)
             return
 
-        # Extract join-form fields from the message text (legacy approach).
+        # Extract join-form fields from the message text.
         text = callback.message.text or callback.message.html_text or ""
 
         def extract_field(field: str, src: str) -> str:

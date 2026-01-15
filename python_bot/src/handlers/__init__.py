@@ -6,7 +6,7 @@ from src.handlers.fallback import router as fallback_router
 from src.handlers.financing import router as financing_router
 from src.handlers.logistics import router as logistics_router
 from src.handlers.lead import router as lead_router
-from src.handlers.legacy import router as legacy_router
+from src.handlers.main_menu import router as main_menu_router
 from src.handlers.payments import router as payments_router
 from src.handlers.quick_audit import router as quick_audit_router
 from src.handlers.services import router as services_router
@@ -18,7 +18,7 @@ from src.handlers.subsidies import router as subsidies_router
 def get_routers() -> list[Router]:
     return [
         start_router,
-        legacy_router,
+        main_menu_router,
         staff_chat_router,
         services_router,
         lead_router,

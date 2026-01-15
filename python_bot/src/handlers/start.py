@@ -19,9 +19,9 @@ from aiogram.utils.deep_linking import decode_payload
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.config import settings
-from src.legacy.content import LEGACY_MENU_TEXT, LEGACY_WELCOME_TEXT
-from src.legacy.keyboards import legacy_main_menu_keyboard
-from src.legacy.rates import get_all_rates_table
+from src.menu.content import MENU_TEXT, WELCOME_TEXT
+from src.menu.keyboards import main_menu_keyboard
+from src.menu.rates import get_all_rates_table
 from src.models.app_setting import AppSetting
 from src.models.required_subscription import RequiredSubscription
 from src.models.staff import StaffMember
@@ -219,7 +219,7 @@ async def _render_menu(
         return
 
     await message.answer(
-        LEGACY_WELCOME_TEXT, reply_markup=legacy_main_menu_keyboard()
+        WELCOME_TEXT, reply_markup=main_menu_keyboard()
     )
 
 
@@ -232,7 +232,7 @@ async def _render_main_menu(
     event: str,
 ) -> None:
     """
-    Render legacy-style main menu through the same access/contacts gates.
+    Render the main menu through the same access/contacts gates.
     Used for both /start (welcome) and /menu (plain menu).
     """
     await state.clear()
@@ -273,7 +273,7 @@ async def _render_main_menu(
     if requested:
         return
 
-    await message.answer(text, reply_markup=legacy_main_menu_keyboard())
+    await message.answer(text, reply_markup=main_menu_keyboard())
 
 
 @router.message(CommandStart())
@@ -323,12 +323,12 @@ async def back_to_main(
         await state.clear()
         try:
             await callback.message.edit_text(
-                LEGACY_MENU_TEXT, reply_markup=legacy_main_menu_keyboard()
+                MENU_TEXT, reply_markup=main_menu_keyboard()
             )
         except Exception:
             try:
                 sent = await callback.message.answer(
-                    LEGACY_MENU_TEXT, reply_markup=legacy_main_menu_keyboard()
+                    MENU_TEXT, reply_markup=main_menu_keyboard()
                 )
                 try:
                     await callback.message.delete()
@@ -493,7 +493,7 @@ async def back_to_menu(
     # UX: avoid chat spam. Prefer re-rendering menu in the same message.
     try:
         await callback.message.edit_text(
-            LEGACY_WELCOME_TEXT, reply_markup=legacy_main_menu_keyboard()
+            WELCOME_TEXT, reply_markup=main_menu_keyboard()
         )
         try:
             await callback.answer()
@@ -513,7 +513,7 @@ async def back_to_menu(
         await callback.message.bot.send_message(
             chat_id,
             LEGACY_WELCOME_TEXT,
-            reply_markup=legacy_main_menu_keyboard(),
+            reply_markup=main_menu_keyboard(),
         )
     except Exception:
         pass
@@ -546,13 +546,13 @@ async def open_menu_new_message(
             try:
                 await callback.message.edit_text(
                     LEGACY_WELCOME_TEXT,
-                    reply_markup=legacy_main_menu_keyboard(),
+                    reply_markup=main_menu_keyboard(),
                 )
             except Exception:
                 try:
                     sent = await callback.message.answer(
                         LEGACY_WELCOME_TEXT,
-                        reply_markup=legacy_main_menu_keyboard(),
+                        reply_markup=main_menu_keyboard(),
                     )
                     try:
                         await callback.message.delete()
@@ -572,7 +572,7 @@ async def open_srvt_services(
     callback: CallbackQuery, state: FSMContext, session: AsyncSession
 ) -> None:
     """
-    Entry point from legacy menu into the new SRVT service flows.
+    Entry point from the main menu into the SRVT service flows.
     Opens a NEW message to avoid overwriting important content.
     """
     allowed, missing, _ = await _check_gate(
@@ -638,11 +638,11 @@ async def gate_check(
         return
     try:
         await callback.message.edit_text(
-            LEGACY_WELCOME_TEXT, reply_markup=legacy_main_menu_keyboard()
+            WELCOME_TEXT, reply_markup=main_menu_keyboard()
         )
     except Exception:
         await callback.message.answer(
-            LEGACY_WELCOME_TEXT, reply_markup=legacy_main_menu_keyboard()
+            WELCOME_TEXT, reply_markup=main_menu_keyboard()
         )
     try:
         await callback.answer("Доступ подтверждён ✅", cache_time=1)

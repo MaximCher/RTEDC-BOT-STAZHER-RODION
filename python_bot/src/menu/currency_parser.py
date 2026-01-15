@@ -38,7 +38,7 @@ def get_cbr_rates() -> Dict[str, object]:
 
 def get_investing_rates() -> Dict[str, object]:
     """
-    Investing.com (EUR/CNY). USD not parsed in legacy implementation.
+    Investing.com (EUR/CNY). USD is not parsed in this implementation.
     """
     import requests
     from bs4 import BeautifulSoup

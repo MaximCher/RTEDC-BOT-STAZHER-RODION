@@ -9,8 +9,8 @@ from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.handlers.start import _check_gate, _maybe_request_contact
-from src.legacy.content import LEGACY_WELCOME_TEXT
-from src.legacy.keyboards import legacy_main_menu_keyboard
+from src.menu.content import WELCOME_TEXT
+from src.menu.keyboards import main_menu_keyboard
 from src.utils.access_gate import gate_keyboard, gate_text
 
 
@@ -51,6 +51,6 @@ async def fallback_to_menu(
     if requested:
         return
 
-    await message.answer(LEGACY_WELCOME_TEXT, reply_markup=legacy_main_menu_keyboard())
+    await message.answer(WELCOME_TEXT, reply_markup=main_menu_keyboard())
 
 

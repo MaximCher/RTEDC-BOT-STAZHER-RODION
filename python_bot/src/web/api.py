@@ -25,7 +25,7 @@ from src.models.app_setting import AppSetting
 from src.models.broadcast_message import BroadcastMessage
 from src.utils.webapp_url import get_webapp_public_url
 from src.utils.telegram_links import parse_tme_url
-from src.utils.legacy_dashboard import humanize_event
+from src.utils.dashboard_humanize import humanize_event
 from src.web.auth import (
     SESSION_KEY,
     require_auth,
