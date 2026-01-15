@@ -2,8 +2,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import AliasChoices, Field, field_validator  # type: ignore
+from pydantic_settings import BaseSettings, SettingsConfigDict  # type: ignore
+
+# NOTE: Local IDE/pyright may not have third-party stubs installed.
+# In production (Docker) these deps are installed, so we silence only
+# the editor warnings for this file.
+# pyright: reportMissingImports=false, reportMissingModuleSource=false
 
 
 class Settings(BaseSettings):
@@ -15,9 +20,21 @@ class Settings(BaseSettings):
     )
 
     # Telegram
-    telegram_bot_token: str = Field(..., alias="TELEGRAM_BOT_TOKEN")
+    telegram_bot_token: str = Field(
+        ...,
+        validation_alias=AliasChoices("TELEGRAM_BOT_TOKEN", "BOT_TOKEN"),
+    )
     telegram_bot_username: str = Field("", alias="TELEGRAM_BOT_USERNAME")
-    manager_chat_ids: str = Field("", alias="MANAGER_CHAT_IDS")
+    manager_chat_ids: str = Field(
+        "",
+        validation_alias=AliasChoices("MANAGER_CHAT_IDS", "CHAT_ID"),
+    )
+    main_group_id: int = Field(
+        0,
+        validation_alias=AliasChoices(
+            "MAIN_GROUP_ID",
+        ),
+    )
 
     # Database
     database_url_override: str = Field("", alias="DATABASE_URL")
@@ -57,7 +74,8 @@ class Settings(BaseSettings):
 
     # Admin panel
     admin_password: str = Field(
-        "ChangeThisPassword123!", alias="ADMIN_PASSWORD"
+        "ChangeThisPassword123!",
+        validation_alias=AliasChoices("ADMIN_PASSWORD", "DASHBOARD_PASSWORD"),
     )
     web_session_secret: str = Field(
         "ChangeThisSecretKey123!", alias="WEB_SESSION_SECRET"
@@ -67,7 +85,10 @@ class Settings(BaseSettings):
     webapp_public_url: str = Field(
         "https://example.com/admin", alias="WEBAPP_PUBLIC_URL"
     )
-    admin_user_ids: str = Field("", alias="ADMIN_USER_IDS")
+    admin_user_ids: str = Field(
+        "",
+        validation_alias=AliasChoices("ADMIN_USER_IDS", "ADMIN_IDS"),
+    )
 
     @field_validator(
         "bitrix_responsible_default_id",
@@ -118,15 +139,18 @@ class Settings(BaseSettings):
     def database_url(self) -> str:
         raw = (self.database_url_override or "").strip()
         if raw:
-            # Accept common sync DSN formats and convert to async SQLAlchemy dialect.
+            # Accept common sync DSN formats and convert to async dialect.
             if raw.startswith("postgresql://"):
-                return "postgresql+asyncpg://" + raw[len("postgresql://") :]
+                return "postgresql+asyncpg://" + raw[len("postgresql://"):]
             if raw.startswith("postgres://"):
-                return "postgresql+asyncpg://" + raw[len("postgres://") :]
+                return "postgresql+asyncpg://" + raw[len("postgres://"):]
             return raw
 
+        user = self.postgres_user
+        pwd = self.postgres_password
         return (
-            f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
+            "postgresql+asyncpg://"
+            f"{user}:{pwd}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
 
@@ -151,43 +175,64 @@ SERVICE_FLOWS: Dict[ServiceKey, Dict[str, Any]] = {
     "subsidies_financing": {
         "direction_label": "Субсидии и финансирование",
         "description": (
-            "💰 Подберём меры господдержки и льготное финансирование под ваш кейс.\n"
-            "Отвечайте коротко — оформим заявку на консультацию и передадим кейс эксперту."
+            "💰 Подберём меры господдержки и льготное финансирование "
+            "под ваш кейс.\n"
+            "Отвечайте коротко — оформим заявку на консультацию и передадим "
+            "кейс эксперту."
         ),
         "questions": [
             "1) ИНН вашей компании (10 или 12 цифр)",
-            "2) Коротко опишите задачу (что финансируем/компенсируем, сумма, сроки — 1–2 фразы)",
+            (
+                "2) Коротко опишите задачу (что финансируем/компенсируем, "
+                "сумма, сроки — 1–2 фразы)"
+            ),
         ],
-        "final_text": "Спасибо! Я зафиксировал вводные по субсидиям/финансированию.",
+        "final_text": (
+            "Спасибо! Я зафиксировал вводные по субсидиям/финансированию."
+        ),
     },
     "logistics_ved": {
         "direction_label": "Логистика и ВЭД",
         "description": (
-            "🚚 Поможем выстроить международную логистику и закрыть вопросы ВЭД: маршруты, таможня, документы, риски.\n"
+            "🚚 Поможем выстроить международную логистику и закрыть вопросы "
+            "ВЭД: "
+            "маршруты, таможня, документы, риски.\n"
             "Ответьте на несколько вопросов — оформим заявку на консультацию."
         ),
         "questions": [
             "1) ИНН вашей компании (10 или 12 цифр)",
-            "2) Коротко опишите задачу (маршрут, груз, объёмы, сроки — 1–2 фразы)",
+            (
+                "2) Коротко опишите задачу (маршрут, груз, объёмы, сроки — "
+                "1–2 фразы)"
+            ),
         ],
         "final_text": "Спасибо! Зафиксировал вводные по логистике и ВЭД.",
     },
     "international_payments": {
         "direction_label": "Международные платежи",
         "description": (
-            "💸 Поможем провести безопасный международный платёж и снизить риски блокировок/комплаенса.\n"
+            "💸 Поможем провести безопасный международный платёж и снизить "
+            "риски блокировок/комплаенса.\n"
             "Ответьте на несколько вопросов — оформим заявку на консультацию."
         ),
         "questions": [
             "1) ИНН вашей компании (10 или 12 цифр)",
-            "2) Коротко опишите задачу (страны, сумма/валюта, назначение — 1–2 фразы)",
+            (
+                "2) Коротко опишите задачу (страны, сумма/валюта, "
+                "назначение — "
+                "1–2 фразы)"
+            ),
         ],
-        "final_text": "Спасибо! Я зафиксировал вводные по международным платежам.",
+        "final_text": (
+            "Спасибо! Я зафиксировал вводные по международным платежам."
+        ),
     },
     "analytics_tnved": {
         "direction_label": "Аналитика и ТН ВЭД",
         "description": (
-            "🔎 Поможем с аналитикой ВЭД: подбор кода ТН ВЭД, пошлины/ограничения, требования и сертификация.\n"
+            "🔎 Поможем с аналитикой ВЭД: подбор кода ТН ВЭД, "
+            "пошлины/ограничения, "
+            "требования и сертификация.\n"
             "Ответьте на вопросы — оформим заявку на консультацию."
         ),
         "questions": [
@@ -199,12 +244,16 @@ SERVICE_FLOWS: Dict[ServiceKey, Dict[str, Any]] = {
     "club_partnership": {
         "direction_label": "Клуб и партнёрство",
         "description": (
-            "🤝 Клуб экспортёров и партнёрство: доступ к экспертам, контактам и практикам ВЭД.\n"
+            "🤝 Клуб экспортёров и партнёрство: доступ к экспертам, контактам "
+            "и практикам ВЭД.\n"
             "Ответьте на вопросы — оформим заявку на консультацию."
         ),
         "questions": [
             "1) ИНН вашей компании (10 или 12 цифр)",
-            "2) Коротко опишите задачу/интерес (клуб, партнёрство, что хотите получить — 1–2 фразы)",
+            (
+                "2) Коротко опишите задачу/интерес (клуб, партнёрство, "
+                "что хотите получить — 1–2 фразы)"
+            ),
         ],
         "final_text": "Спасибо! Я зафиксировал заявку по клубу/партнёрству.",
     },
@@ -231,23 +280,36 @@ BITRIX_ROUTING: Dict[ServiceKey, Dict[str, Any]] = {
 MESSAGES: Dict[str, str] = {
     "welcome": (
         "Здравствуйте! Я SRVT Assistant.\n\n"
-        "Помогаю по субсидиям, логистике и ВЭД, международным платежам и аналитике.\n\n"
+        "Помогаю по субсидиям, логистике и ВЭД, международным платежам "
+        "и аналитике.\n\n"
         "Выберите направление ниже 👇"
     ),
     "choose_service": "Пожалуйста, выберите направление:",
     "back_to_menu": "Вы вернулись в меню. Выберите направление ниже 👇",
-    "unknown_service": "Не удалось определить направление. Попробуйте ещё раз через меню.",
-    "questionnaire_done": "Заявка завершена. Спасибо! Если хотите — передам кейс эксперту, нажмите кнопку ниже.",
-    "lead_inn_request": "Укажите ИНН вашей компании (10 или 12 цифр, без пробелов).",
-    "lead_contact_request": "Оставьте, пожалуйста, ФИО и телефон (можно одной строкой):\n\nИванов Иван +79991234567",
+    "unknown_service": (
+        "Не удалось определить направление. Попробуйте ещё раз через меню."
+    ),
+    "questionnaire_done": (
+        "Заявка завершена. Спасибо! Если хотите — передам кейс эксперту, "
+        "нажмите кнопку ниже."
+    ),
+    "lead_inn_request": (
+        "Укажите ИНН вашей компании (10 или 12 цифр, без пробелов)."
+    ),
+    "lead_contact_request": (
+        "Оставьте, пожалуйста, ФИО и телефон (можно одной строкой):\n\n"
+        "Иванов Иван +79991234567"
+    ),
     "lead_meeting_window_request": (
         "Спасибо! Теперь подскажите удобное время для встречи/созвона (МСК).\n"
         "Например: «завтра 14:00–18:00» или «в будни после 19:00».\n\n"
-        "Можно выбрать кнопкой ниже или написать вручную. Если не важно — напишите: «не важно»."
+        "Можно выбрать кнопкой ниже или написать вручную. "
+        "Если не важно — напишите: «не важно»."
     ),
     "lead_received": (
         "Спасибо! Заявка принята ✅\n"
-        "Персональный менеджер SRVT свяжется с вами в ближайшее время (в рабочее время)."
+        "Персональный менеджер SRVT свяжется с вами в ближайшее время "
+        "(в рабочее время)."
     ),
     "subsidy_calc_intro": (
         "Ок, давайте рассчитаем ориентировочный объём субсидии.\n"
@@ -258,6 +320,7 @@ MESSAGES: Dict[str, str] = {
     ),
     "subsidy_calc_no_context": (
         "⚠️ В базе знаний не нашёл точные проценты/лимиты под ваш кейс.\n"
-        "Я всё равно могу передать вводные менеджеру SRVT — он подберёт программу и рассчитает точно."
+        "Я всё равно могу передать вводные менеджеру SRVT — он подберёт "
+        "программу и рассчитает точно."
     ),
 }

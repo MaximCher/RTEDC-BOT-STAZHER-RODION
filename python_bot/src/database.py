@@ -196,6 +196,62 @@ async def init_db() -> None:
         except Exception:
             pass
 
+        # ============================================================
+        # Legacy dashboard compatibility (RTEDC-BOT/dashboard)
+        # ============================================================
+        # These tables are used by the existing Flask dashboard in the root repo.
+        # Creating them here allows us to keep the infrastructure unchanged while
+        # gradually migrating bot runtime to python_bot/.
+        try:
+            await conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS users (
+                      id SERIAL PRIMARY KEY,
+                      user_id BIGINT UNIQUE,
+                      username TEXT,
+                      full_name TEXT,
+                      first_seen TIMESTAMPTZ,
+                      last_active TIMESTAMPTZ
+                    );
+                    """
+                )
+            )
+        except Exception:
+            pass
+        try:
+            await conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS events (
+                      id SERIAL PRIMARY KEY,
+                      user_id BIGINT REFERENCES users(user_id),
+                      action TEXT,
+                      params TEXT,
+                      timestamp TIMESTAMPTZ
+                    );
+                    """
+                )
+            )
+        except Exception:
+            pass
+        try:
+            await conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS broadcast (
+                      id SERIAL PRIMARY KEY,
+                      text TEXT NOT NULL,
+                      sent INTEGER DEFAULT 0,
+                      created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                      send_at TIMESTAMPTZ
+                    );
+                    """
+                )
+            )
+        except Exception:
+            pass
+
     logger.info(
         "database_initialized",
         host=settings.postgres_host,

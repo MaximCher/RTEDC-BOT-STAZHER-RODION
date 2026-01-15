@@ -6,11 +6,37 @@ from src.config import SERVICES
 
 
 def services_keyboard() -> InlineKeyboardMarkup:
-    rows = []
+    # Legacy-style layout: 2 buttons per row (where possible)
+    rows: list[list[InlineKeyboardButton]] = []
+    row: list[InlineKeyboardButton] = []
     for key, label in SERVICES.items():
-        rows.append(
-            [InlineKeyboardButton(text=label, callback_data=f"service:{key}")]
-        )
+        row.append(InlineKeyboardButton(text=label, callback_data=f"service:{key}"))
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    # Always allow exit to main menu from calculators hub.
+    rows.append([InlineKeyboardButton(text="В главное меню", callback_data="menu:new")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def lead_services_keyboard() -> InlineKeyboardMarkup:
+    """
+    Service picker that immediately starts the lead flow for the chosen direction.
+    Used when user clicks a global CTA like "Заявка на консультацию" from menus.
+    """
+    # Legacy-style layout: 2 buttons per row (where possible)
+    rows: list[list[InlineKeyboardButton]] = []
+    row: list[InlineKeyboardButton] = []
+    for key, label in SERVICES.items():
+        row.append(InlineKeyboardButton(text=label, callback_data=f"lead:start:{key}"))
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append([InlineKeyboardButton(text="В главное меню", callback_data="menu:new")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -22,12 +48,10 @@ def flow_nav_keyboard(back_callback_data: str | None = None) -> InlineKeyboardMa
     """
     # Prefer opening menu as a new message so we never overwrite "important" bot messages.
     back_cb = back_callback_data or "menu:new"
-    # UX: keep navigation buttons full-width and stable across screens
-    # (1 button per row prevents "jumping" between wide and narrow layouts).
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ Назад", callback_data=back_cb)],
-            [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:new")],
+            [InlineKeyboardButton(text="Назад", callback_data=back_cb)],
+            [InlineKeyboardButton(text="В главное меню", callback_data="menu:new")],
         ]
     )
 
@@ -49,10 +73,10 @@ def flow_nav_with_choices_keyboard(
         for i, ch in enumerate(choices):
             rows.append(
                 [
-                InlineKeyboardButton(
+                    InlineKeyboardButton(
                         text=ch,
                         callback_data=f"{choice_callback_prefix}:{i}",
-                )
+                    )
                 ]
             )
     rows += flow_nav_keyboard(back_callback_data).inline_keyboard
@@ -60,11 +84,10 @@ def flow_nav_with_choices_keyboard(
 
 
 def lead_actions_keyboard(service_key: str) -> InlineKeyboardMarkup:
-    # UX: keep CTAs stable — 1 button per row (avoid narrow "two-column" layouts).
     rows = [
         [
             InlineKeyboardButton(
-                text="📩 Заявка на консультацию",
+                text="✉️ Подать запрос",
                 callback_data=f"lead:start:{service_key}",
             )
         ]
@@ -79,8 +102,8 @@ def lead_actions_keyboard(service_key: str) -> InlineKeyboardMarkup:
             ]
         )
     rows += [
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"entry:new:{service_key}")],
-        [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:new")],
+        [InlineKeyboardButton(text="Назад", callback_data=f"entry:new:{service_key}")],
+        [InlineKeyboardButton(text="В главное меню", callback_data="menu:new")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -91,14 +114,14 @@ def subsidy_chat_keyboard(service_key: str) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="📩 Заявка на консультацию",
+                    text="✉️ Подать запрос",
                     callback_data=f"lead:start:{service_key}",
                 )
             ],
             [
-                InlineKeyboardButton(text="⬅️ Назад", callback_data=f"entry:new:{service_key}"),
+                InlineKeyboardButton(text="Назад", callback_data=f"entry:new:{service_key}"),
             ],
-            [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:new")],
+            [InlineKeyboardButton(text="В главное меню", callback_data="menu:new")],
         ]
     )
 
@@ -126,7 +149,7 @@ def subsidies_entry_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="📩 Заявка на консультацию",
+                text="✉️ Подать запрос",
                 callback_data="lead:start:subsidies_financing",
             )
         ],
@@ -145,7 +168,7 @@ def payments_entry_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="📩 Заявка на консультацию",
+                text="✉️ Подать запрос",
                 callback_data="lead:start:international_payments",
             )
         ],
@@ -164,7 +187,7 @@ def logistics_entry_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="📩 Заявка на консультацию",
+                text="✉️ Подать запрос",
                 callback_data="lead:start:logistics_ved",
             )
         ],
@@ -183,7 +206,7 @@ def analytics_entry_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="📩 Заявка на консультацию",
+                text="✉️ Подать запрос",
                 callback_data="lead:start:analytics_tnved",
             )
         ],
@@ -202,7 +225,7 @@ def quick_audit_entry_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="📩 Заявка на консультацию",
+                text="✉️ Подать запрос",
                 callback_data="lead:start:quick_audit_inn",
             )
         ],
@@ -221,7 +244,7 @@ def club_entry_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="📩 Заявка на консультацию",
+                text="✉️ Подать запрос",
                 callback_data="lead:start:club_partnership",
             )
         ],
@@ -231,25 +254,18 @@ def club_entry_keyboard() -> InlineKeyboardMarkup:
 
 
 def meeting_window_keyboard(include_back: bool = False) -> InlineKeyboardMarkup:
-    # UX: keep options full-width and stable (1 button per row).
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="Сегодня 10:00–13:00", callback_data="lead:mw:today_am")],
-            [InlineKeyboardButton(text="Сегодня 14:00–18:00", callback_data="lead:mw:today_pm")],
-            [InlineKeyboardButton(text="Завтра 10:00–13:00", callback_data="lead:mw:tomorrow_am")],
-            [InlineKeyboardButton(text="Завтра 14:00–18:00", callback_data="lead:mw:tomorrow_pm")],
-            [InlineKeyboardButton(text="Будни после 19:00", callback_data="lead:mw:weekdays_19")],
-            [InlineKeyboardButton(text="Не важно", callback_data="lead:mw:any")],
-            (
-                [
-                    InlineKeyboardButton(text="⬅️ Назад", callback_data="lead:back"),
-                ]
-                if include_back
-                else []
-            ),
-            [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:new")],
-        ]
-    )
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text="Сегодня 10:00–13:00", callback_data="lead:mw:today_am")],
+        [InlineKeyboardButton(text="Сегодня 14:00–18:00", callback_data="lead:mw:today_pm")],
+        [InlineKeyboardButton(text="Завтра 10:00–13:00", callback_data="lead:mw:tomorrow_am")],
+        [InlineKeyboardButton(text="Завтра 14:00–18:00", callback_data="lead:mw:tomorrow_pm")],
+        [InlineKeyboardButton(text="Будни после 19:00", callback_data="lead:mw:weekdays_19")],
+        [InlineKeyboardButton(text="Не важно", callback_data="lead:mw:any")],
+    ]
+    if include_back:
+        rows.append([InlineKeyboardButton(text="Назад", callback_data="lead:back")])
+    rows.append([InlineKeyboardButton(text="В главное меню", callback_data="menu:new")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def staff_ticket_keyboard(ticket_id: int) -> InlineKeyboardMarkup:

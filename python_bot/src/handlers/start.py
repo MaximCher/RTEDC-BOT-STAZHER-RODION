@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from aiogram import F, Router
-from aiogram.filters import CommandObject, CommandStart
+from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
@@ -19,13 +19,22 @@ from aiogram.utils.deep_linking import decode_payload
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.config import settings
+from src.legacy.content import LEGACY_MENU_TEXT, LEGACY_WELCOME_TEXT
+from src.legacy.keyboards import legacy_main_menu_keyboard
+from src.legacy.rates import get_all_rates_table
 from src.models.app_setting import AppSetting
 from src.models.required_subscription import RequiredSubscription
 from src.models.staff import StaffMember
 from src.models.staff_invite import StaffInvite
 from src.models.user_memory import UserMemory
+from src.services.currency_rates_service import (
+    ensure_full_refresh,
+    format_rates_text,
+    get_fast_snapshot,
+)
 from src.services.staff_service import is_admin, is_staff, touch_staff_profile
 from src.utils.access_gate import gate_keyboard, gate_text
+from src.utils.funnel import log_event
 from src.utils.keyboards import services_keyboard
 from src.utils.messages import msg
 from src.utils.service_entry import entry_screen_for_service
@@ -40,7 +49,10 @@ class ContactRequest(StatesGroup):
 
 async def _ask_contact_enabled(session: AsyncSession) -> bool:
     raw = await AppSetting.get(session, "ask_contact_on_start")
-    return (raw or "").strip().lower() in {"1", "true", "yes", "on"}
+    # Default ON if not set
+    if raw is None or not str(raw).strip():
+        return True
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
 async def _required_subscriptions(
@@ -111,7 +123,9 @@ async def _maybe_request_contact(
     # Existing users should not be asked again.
     um = (
         await session.execute(
-            select(UserMemory).where(UserMemory.user_id == message.from_user.id)
+            select(UserMemory).where(
+                UserMemory.user_id == message.from_user.id
+            )
         )
     ).scalar_one_or_none()
     if um is not None:
@@ -149,6 +163,19 @@ async def _render_menu(
     message: Message, state: FSMContext, session: AsyncSession
 ) -> None:
     await state.clear()
+
+    # Legacy dashboard compatibility: log /start as before.
+    try:
+        await log_event(
+            session,
+            user_id=message.from_user.id,
+            chat_id=message.chat.id,
+            username=message.from_user.username,
+            event="start",
+            meta={"label": "Запуск бота"},
+        )
+    except Exception:
+        pass
 
     # Update staff profile (if user is staff)
     try:
@@ -191,7 +218,62 @@ async def _render_menu(
     if requested:
         return
 
-    await message.answer(msg("welcome"), reply_markup=services_keyboard())
+    await message.answer(
+        LEGACY_WELCOME_TEXT, reply_markup=legacy_main_menu_keyboard()
+    )
+
+
+async def _render_main_menu(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    *,
+    text: str,
+    event: str,
+) -> None:
+    """
+    Render legacy-style main menu through the same access/contacts gates.
+    Used for both /start (welcome) and /menu (plain menu).
+    """
+    await state.clear()
+
+    try:
+        await log_event(
+            session,
+            user_id=message.from_user.id,
+            chat_id=message.chat.id,
+            username=message.from_user.username,
+            event=event,
+            meta={"label": "Главное меню"},
+        )
+    except Exception:
+        pass
+
+    # Update staff profile (if user is staff)
+    try:
+        await touch_staff_profile(
+            session,
+            tg_user_id=message.from_user.id,
+            tg_username=message.from_user.username,
+            tg_full_name=message.from_user.full_name,
+        )
+    except Exception:
+        pass
+
+    allowed, missing, _ = await _check_gate(
+        bot=message.bot, session=session, user_id=message.from_user.id
+    )
+    if not allowed:
+        await message.answer(
+            gate_text(missing), reply_markup=gate_keyboard(missing)
+        )
+        return
+
+    requested = await _maybe_request_contact(message, state, session)
+    if requested:
+        return
+
+    await message.answer(text, reply_markup=legacy_main_menu_keyboard())
 
 
 @router.message(CommandStart())
@@ -199,6 +281,130 @@ async def cmd_start(
     message: Message, state: FSMContext, session: AsyncSession
 ) -> None:
     await _render_menu(message, state, session)
+
+
+@router.message(Command("menu"))
+async def cmd_menu(
+    message: Message, state: FSMContext, session: AsyncSession
+) -> None:
+    await _render_main_menu(
+        message,
+        state,
+        session,
+        text=LEGACY_MENU_TEXT,
+        event="menu",
+    )
+
+
+@router.callback_query(F.data == "back_to_main")
+async def back_to_main(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    """
+    Legacy callback used by old keyboards. Route it through gate/contacts and
+    render menu, стараясь редактировать/заменять сообщение без спама.
+    """
+    allowed, missing, _ = await _check_gate(
+        bot=callback.message.bot,
+        session=session,
+        user_id=callback.from_user.id,
+    )
+    if not allowed:
+        await callback.message.answer(
+            gate_text(missing), reply_markup=gate_keyboard(missing)
+        )
+        try:
+            await callback.answer()
+        except Exception:
+            pass
+        return
+    requested = await _maybe_request_contact(callback.message, state, session)
+    if not requested:
+        await state.clear()
+        try:
+            await callback.message.edit_text(
+                LEGACY_MENU_TEXT, reply_markup=legacy_main_menu_keyboard()
+            )
+        except Exception:
+            try:
+                sent = await callback.message.answer(
+                    LEGACY_MENU_TEXT, reply_markup=legacy_main_menu_keyboard()
+                )
+                try:
+                    await callback.message.delete()
+                except Exception:
+                    pass
+                callback.message = sent  # best effort to keep thread tidy
+            except Exception:
+                pass
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+
+
+@router.message(Command("currency"))
+async def cmd_currency(
+    message: Message, state: FSMContext, session: AsyncSession
+) -> None:
+    """
+    Legacy command /currency (text output) routed through gate.
+    """
+    await state.clear()
+    allowed, missing, _ = await _check_gate(
+        bot=message.bot, session=session, user_id=message.from_user.id
+    )
+    if not allowed:
+        await message.answer(
+            gate_text(missing), reply_markup=gate_keyboard(missing)
+        )
+        return
+    try:
+        await log_event(
+            session,
+            user_id=message.from_user.id,
+            chat_id=message.chat.id,
+            username=message.from_user.username,
+            event="currency_view",
+            meta={"label": "Просмотр курсов валют"},
+        )
+    except Exception:
+        pass
+    try:
+        snap = await get_fast_snapshot()
+        await ensure_full_refresh()
+        await message.answer(
+            format_rates_text(snap.table, header="Актуальные курсы валют"),
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="📷 Таблица картинкой",
+                            callback_data="currency:image",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text="В главное меню", callback_data="menu:new"
+                        )
+                    ],
+                ]
+            ),
+        )
+    except Exception:
+        await message.answer(
+            "❌ Произошла ошибка при получении курсов валют. Попробуйте позже.",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="В главное меню", callback_data="menu:new"
+                        )
+                    ]
+                ]
+            ),
+        )
 
 
 @router.message(CommandStart(deep_link=True))
@@ -287,7 +493,7 @@ async def back_to_menu(
     # UX: avoid chat spam. Prefer re-rendering menu in the same message.
     try:
         await callback.message.edit_text(
-            msg("welcome"), reply_markup=services_keyboard()
+            LEGACY_WELCOME_TEXT, reply_markup=legacy_main_menu_keyboard()
         )
         try:
             await callback.answer()
@@ -305,7 +511,9 @@ async def back_to_menu(
         pass
     try:
         await callback.message.bot.send_message(
-            chat_id, msg("welcome"), reply_markup=services_keyboard()
+            chat_id,
+            LEGACY_WELCOME_TEXT,
+            reply_markup=legacy_main_menu_keyboard(),
         )
     except Exception:
         pass
@@ -319,9 +527,8 @@ async def back_to_menu(
 async def open_menu_new_message(
     callback: CallbackQuery, state: FSMContext, session: AsyncSession
 ) -> None:
-    """Open menu without editing/deleting the current message (keeps important info in history)."""
-    # UX: keep Telegram "loading" animation on the pressed button.
-    # We'll answer the callback after UI is rendered.
+    """Open menu, предпочитая редактирование сообщения, чтобы не плодить новые."""
+    await state.clear()
     allowed, missing, _ = await _check_gate(
         bot=callback.message.bot,
         session=session,
@@ -332,11 +539,62 @@ async def open_menu_new_message(
             gate_text(missing), reply_markup=gate_keyboard(missing)
         )
     else:
-        requested = await _maybe_request_contact(callback.message, state, session)
+        requested = await _maybe_request_contact(
+            callback.message, state, session
+        )
         if not requested:
-            await callback.message.answer(
-                msg("welcome"), reply_markup=services_keyboard()
-            )
+            try:
+                await callback.message.edit_text(
+                    LEGACY_WELCOME_TEXT,
+                    reply_markup=legacy_main_menu_keyboard(),
+                )
+            except Exception:
+                try:
+                    sent = await callback.message.answer(
+                        LEGACY_WELCOME_TEXT,
+                        reply_markup=legacy_main_menu_keyboard(),
+                    )
+                    try:
+                        await callback.message.delete()
+                    except Exception:
+                        pass
+                    callback.message = sent
+                except Exception:
+                    pass
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+
+
+@router.callback_query(F.data == "srvt:services")
+async def open_srvt_services(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    """
+    Entry point from legacy menu into the new SRVT service flows.
+    Opens a NEW message to avoid overwriting important content.
+    """
+    allowed, missing, _ = await _check_gate(
+        bot=callback.message.bot,
+        session=session,
+        user_id=callback.from_user.id,
+    )
+    if not allowed:
+        await callback.message.answer(
+            gate_text(missing), reply_markup=gate_keyboard(missing)
+        )
+        try:
+            await callback.answer()
+        except Exception:
+            pass
+        return
+    requested = await _maybe_request_contact(callback.message, state, session)
+    if not requested:
+        await state.clear()
+        await callback.message.answer(
+            msg("welcome"), reply_markup=services_keyboard()
+        )
     try:
         await callback.answer()
     except Exception:
@@ -380,11 +638,11 @@ async def gate_check(
         return
     try:
         await callback.message.edit_text(
-            msg("welcome"), reply_markup=services_keyboard()
+            LEGACY_WELCOME_TEXT, reply_markup=legacy_main_menu_keyboard()
         )
     except Exception:
         await callback.message.answer(
-            msg("welcome"), reply_markup=services_keyboard()
+            LEGACY_WELCOME_TEXT, reply_markup=legacy_main_menu_keyboard()
         )
     try:
         await callback.answer("Доступ подтверждён ✅", cache_time=1)
@@ -416,6 +674,7 @@ async def on_contact_shared(
     await message.answer("Спасибо! ✅", reply_markup=ReplyKeyboardRemove())
     await _render_menu(message, state, session)
 
+
 @router.message(ContactRequest.waiting_for_contact)
 async def contact_required_repeat(
     message: Message, state: FSMContext, session: AsyncSession
@@ -438,7 +697,9 @@ async def contact_required_repeat(
         bot=message.bot, session=session, user_id=message.from_user.id
     )
     if not allowed:
-        await message.answer(gate_text(missing), reply_markup=gate_keyboard(missing))
+        await message.answer(
+            gate_text(missing), reply_markup=gate_keyboard(missing)
+        )
         return
     await _maybe_request_contact(message, state, session)
 

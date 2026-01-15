@@ -23,6 +23,12 @@ function fmtDate(iso) {
 }
 
 const SERVICE_LABELS = {
+  service_payments: "Международные платежи",
+  service_credits: "Льготные кредиты",
+  service_subsidies: "Субсидии",
+  service_logistics: "Логистика",
+  service_check: "Проверка контрагента",
+  service_translate: "Лингвистические переводы",
   subsidies_financing: "Субсидии и льготное финансирование",
   logistics_ved: "Логистика и ВЭД",
   international_payments: "Международные платежи",
@@ -160,7 +166,226 @@ async function reloadAll() {
     loadUsers(),
     loadStaff(),
     loadVirality(),
+    loadBroadcasts(),
+    loadEvents(),
+    loadActions(),
   ]);
+}
+
+async function loadBroadcasts() {
+  const container = qs("broadcast-list");
+  if (!container) return;
+  try {
+    const data = await api(`/api/broadcast`);
+    const items = data.items || [];
+    if (!items.length) {
+      container.innerHTML = `<div class="text-secondary">Пока нет запланированных рассылок.</div>`;
+      return;
+    }
+    container.innerHTML = `
+      <div class="list-group">
+        ${items
+          .map((it) => {
+            const id = Number(it.id);
+            const text = String(it.text || "");
+            const sendAt = it.send_at ? String(it.send_at) : "";
+            const createdAt = it.created_at ? String(it.created_at) : "";
+            const when = sendAt ? escapeHtml(sendAt) : "—";
+            const created = createdAt ? escapeHtml(createdAt) : "—";
+            return `
+              <div class="list-group-item">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                  <div style="min-width: 0;">
+                    <div class="fw-bold">Отправка: <span class="text-secondary">${when}</span></div>
+                    <div class="text-secondary small">создано: ${created}</div>
+                    <div class="mt-2" style="white-space: pre-wrap;">${escapeHtml(text)}</div>
+                  </div>
+                  <div class="text-end">
+                    <button class="btn btn-sm btn-outline-danger" onclick="removeBroadcast(${id}); return false;">Удалить</button>
+                  </div>
+                </div>
+              </div>
+            `;
+          })
+          .join("")}
+      </div>
+    `;
+  } catch (e) {
+    container.innerHTML = `<div class="text-danger small">Не удалось загрузить рассылки.</div>`;
+  }
+}
+
+async function addBroadcast() {
+  const text = (qs("broadcast-text")?.value || "").trim();
+  const sendAt = (qs("broadcast-send-at")?.value || "").trim();
+  if (!text) {
+    alert("Введите текст рассылки.");
+    return;
+  }
+  if (!sendAt) {
+    alert("Выберите время отправки.");
+    return;
+  }
+  await api(`/api/broadcast`, {
+    method: "POST",
+    body: JSON.stringify({ text, send_at: sendAt }),
+  });
+  qs("broadcast-text").value = "";
+  await loadBroadcasts();
+}
+
+async function removeBroadcast(id) {
+  await api(`/api/broadcast/${Number(id)}`, { method: "DELETE" });
+  await loadBroadcasts();
+}
+
+async function loadActions() {
+  const container = qs("actions-top");
+  if (!container) return;
+  try {
+    const q = getDatesQuery();
+    const data = await api(`/api/actions${q}`);
+    const topActions = data.top_actions || [];
+    const topHuman = data.top_human || [];
+
+    const renderList = (items, labelKey, countKey) => {
+      if (!items.length) return `<div class="text-secondary">—</div>`;
+      return `
+        <div class="list-group">
+          ${items
+            .map((it) => {
+              const label = String(it.desc || it[labelKey] || "");
+              const cnt = Number(it[countKey] || 0);
+              return `
+                <div class="list-group-item">
+                  <div class="d-flex justify-content-between gap-2">
+                    <div style="min-width: 0;">
+                      <div class="fw-bold text-truncate">${escapeHtml(label)}</div>
+                    </div>
+                    <div class="badge bg-blue-lt">${escapeHtml(String(cnt))}</div>
+                  </div>
+                </div>
+              `;
+            })
+            .join("")}
+        </div>
+      `;
+    };
+
+    container.innerHTML = `
+      <div>
+        <div class="text-secondary small mb-1">Top action</div>
+        ${renderList(topActions, "action", "count")}
+      </div>
+      <div>
+        <div class="text-secondary small mb-1">Top (human)</div>
+        ${renderList(topHuman, "desc", "count")}
+      </div>
+    `;
+  } catch (e) {
+    container.innerHTML = `<div class="text-danger small">Не удалось загрузить топ действий.</div>`;
+  }
+}
+
+async function loadEvents() {
+  const container = qs("events-list");
+  if (!container) return;
+  const userIdRaw = (qs("events-user-id")?.value || "").trim();
+  const action = (qs("events-action")?.value || "").trim();
+  const limit = Number((qs("events-limit")?.value || "200").trim());
+  const params = new URLSearchParams();
+  const start = qs("start-date")?.value || "";
+  const end = qs("end-date")?.value || "";
+  if (start) params.set("start_date", start);
+  if (end) params.set("end_date", end);
+  if (userIdRaw) params.set("user_id", userIdRaw);
+  if (action) params.set("action", action);
+  if (Number.isFinite(limit)) params.set("limit", String(limit));
+  const qsStr = params.toString() ? `?${params.toString()}` : "";
+
+  try {
+    const data = await api(`/api/events${qsStr}`);
+    const items = data.items || [];
+    if (!items.length) {
+      container.innerHTML = `<div class="text-secondary">Событий нет.</div>`;
+      return;
+    }
+    container.innerHTML = `
+      <div class="list-group">
+        ${items
+          .map((e) => {
+            const uid = Number(e.user_id || 0);
+            const who = e.full_name || (e.username ? `@${e.username}` : `user_id=${uid}`);
+            const when = fmtDate(e.timestamp);
+            const desc = String(e.desc || e.action || "");
+            return `
+              <a href="#" class="list-group-item list-group-item-action" onclick="openConversation(${uid}); return false;">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                  <div style="min-width: 0;">
+                    <div class="fw-bold text-truncate">${escapeHtml(who)}</div>
+                    <div class="text-secondary">${escapeHtml(desc)}</div>
+                  </div>
+                  <div class="text-secondary small text-end">${escapeHtml(when)}</div>
+                </div>
+              </a>
+            `;
+          })
+          .join("")}
+      </div>
+    `;
+  } catch (e) {
+    container.innerHTML = `<div class="text-danger small">Не удалось загрузить события.</div>`;
+  }
+}
+
+async function loadUserJourney(userId) {
+  const container = qs("journey");
+  if (!container) return;
+  if (!userId) {
+    container.innerHTML = `<div class="text-secondary">Выберите пользователя.</div>`;
+    return;
+  }
+  try {
+    const data = await api(`/api/user-journey/${Number(userId)}?limit=1500`);
+    const events = data.events || [];
+    if (!events.length) {
+      container.innerHTML = `<div class="text-secondary">Событий по пользователю нет.</div>`;
+      return;
+    }
+    container.innerHTML = events
+      .map((e) => {
+        const when = fmtDate(e.timestamp);
+        const desc = String(e.desc || e.action || "");
+        return `
+          <div class="msg event">
+            <div class="head">
+              <div>${escapeHtml("Событие")}</div>
+              <div>${escapeHtml(when)}</div>
+            </div>
+            <div>${escapeHtml(desc)}</div>
+          </div>
+        `;
+      })
+      .join("");
+    container.scrollTop = container.scrollHeight;
+  } catch (e) {
+    container.innerHTML = `<div class="text-danger small">Не удалось загрузить путь пользователя.</div>`;
+  }
+}
+
+function toggleJourney(show) {
+  const messages = qs("messages");
+  const journey = qs("journey");
+  if (!messages || !journey) return;
+  if (show) {
+    messages.style.display = "none";
+    journey.style.display = "block";
+    const userId = window.__currentUserId || 0;
+    if (userId) loadUserJourney(userId);
+  } else {
+    journey.style.display = "none";
+    messages.style.display = "block";
+  }
 }
 
 async function loadVirality() {
@@ -794,6 +1019,7 @@ async function openConversation(userId) {
   const title = messages[0]?.full_name || `User ${userId}`;
   qs("conversation-title").textContent = title;
   qs("conversation-meta").textContent = `user_id=${userId} · сообщений=${messages.length}`;
+  window.__currentUserId = Number(userId);
 
   const container = qs("messages");
   if (!messages.length) {

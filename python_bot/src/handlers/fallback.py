@@ -6,15 +6,21 @@ from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from src.utils.keyboards import services_keyboard
-from src.utils.messages import msg
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.handlers.start import _check_gate, _maybe_request_contact
+from src.legacy.content import LEGACY_WELCOME_TEXT
+from src.legacy.keyboards import legacy_main_menu_keyboard
+from src.utils.access_gate import gate_keyboard, gate_text
 
 
 router = Router()
 
 
 @router.message(StateFilter(None), F.text)
-async def fallback_to_menu(message: Message, state: FSMContext) -> None:
+async def fallback_to_menu(
+    message: Message, state: FSMContext, session: AsyncSession
+) -> None:
     """
     Safety net: if the bot was restarted and FSM state was lost, user messages would otherwise
     be ignored (no state-specific handler matches). Show the main menu instead.
@@ -34,6 +40,17 @@ async def fallback_to_menu(message: Message, state: FSMContext) -> None:
         return
 
     await state.clear()
-    await message.answer(msg("welcome"), reply_markup=services_keyboard())
+    allowed, missing, _ = await _check_gate(
+        bot=message.bot, session=session, user_id=message.from_user.id
+    )
+    if not allowed:
+        await message.answer(gate_text(missing), reply_markup=gate_keyboard(missing))
+        return
+
+    requested = await _maybe_request_contact(message, state, session)
+    if requested:
+        return
+
+    await message.answer(LEGACY_WELCOME_TEXT, reply_markup=legacy_main_menu_keyboard())
 
 

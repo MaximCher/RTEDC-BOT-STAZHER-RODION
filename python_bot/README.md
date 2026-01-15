@@ -4,7 +4,14 @@
 
 ## Быстрый старт (Docker)
 
-Из корня репозитория:
+### Важно про build context (hybrid)
+
+В ветке `new-srvt-bot` `python_bot` работает как **гибрид** и для паритета использует legacy файлы
+из корня репозитория (`bot/`, `currency_parser.py`, `table_image.py`).
+
+Поэтому в **prod compose** сборка идёт из `..` (корня репозитория), даже если вы запускаете команды из `python_bot/`.
+
+Из корня репозитория (рекомендуется для первого запуска):
 
 ```bash
 cd python_bot
@@ -85,6 +92,11 @@ docker compose exec bot python scripts/ingest_pdf_subsidies.py --pdf data/subsid
 docker compose -f docker-compose.prod.yml up -d --build
 curl http://localhost/health
 ```
+
+## Важно про `.env`
+
+Не используйте inline‑комментарии после значений (например `KEY=  # comment`).
+Если значение пустое — пишите строго `KEY=` и перенос строки.
 
 ## CI/CD (GitHub Actions → VPS)
 

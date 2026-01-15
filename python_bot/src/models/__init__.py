@@ -1,6 +1,7 @@
 from src.models.app_setting import AppSetting
 from src.models.bitrix_lead import BitrixLead
 from src.models.bot_heartbeat import BotHeartbeat
+from src.models.broadcast_message import BroadcastMessage
 from src.models.dialog_message import DialogMessage
 from src.models.documents import Document
 from src.models.lead_ticket import LeadTicket
@@ -18,6 +19,7 @@ __all__ = [
     "StaffMember",
     "StaffInvite",
     "BotHeartbeat",
+    "BroadcastMessage",
     "RequiredSubscription",
     "AppSetting",
 ]

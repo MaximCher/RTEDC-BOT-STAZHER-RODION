@@ -43,7 +43,8 @@ async def webapp_menu_button_sync_loop(
     while not stop_event.is_set():
         try:
             url = get_webapp_public_url(settings.webapp_public_url).strip()
-            if url.startswith("https://") and url != last_url:
+            # Allow http as fallback if https/tuna is unavailable.
+            if url.startswith(("https://", "http://")) and url != last_url:
                 async with session_factory() as session:
                     admin_ids = await _list_admin_chat_ids(session)
                 for chat_id in admin_ids:

@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
-from sqlalchemy import func, literal, select
+from sqlalchemy import func, literal, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
@@ -22,8 +22,10 @@ from src.models.staff_invite import StaffInvite
 from src.models.bot_heartbeat import BotHeartbeat
 from src.models.required_subscription import RequiredSubscription
 from src.models.app_setting import AppSetting
+from src.models.broadcast_message import BroadcastMessage
 from src.utils.webapp_url import get_webapp_public_url
 from src.utils.telegram_links import parse_tme_url
+from src.utils.legacy_dashboard import humanize_event
 from src.web.auth import (
     SESSION_KEY,
     require_auth,
@@ -54,6 +56,12 @@ class RequiredSubscriptionCreateRequest(BaseModel):
 
 class ToggleRequest(BaseModel):
     enabled: bool
+
+
+class BroadcastCreateRequest(BaseModel):
+    text: str
+    # ISO string from <input type="datetime-local"> (no timezone)
+    send_at: str
 
 
 def _parse_date(raw: Optional[str]) -> Optional[date]:
@@ -382,6 +390,274 @@ def register_api(app: FastAPI) -> None:
         await AppSetting.set(session, "ask_contact_on_start", "1" if payload.enabled else "0")
         await session.commit()
         return {"success": True, "enabled": bool(payload.enabled)}
+
+    # ============================================================
+    # Broadcasts (schedule)
+    # ============================================================
+
+    @app.get("/api/broadcast")
+    async def list_broadcasts(
+        request: Request,
+        limit: int = 200,
+        session: AsyncSession = Depends(_get_session),
+        _: None = Depends(require_auth),
+    ) -> Dict[str, Any]:
+        if limit <= 0 or limit > 1000:
+            raise HTTPException(status_code=400, detail="Invalid limit")
+        items = await BroadcastMessage.list_pending(session, limit=limit)
+        return {
+            "items": [
+                {
+                    "id": int(b.id),
+                    "text": b.text,
+                    "sent": int(b.sent or 0),
+                    "created_at": b.created_at.isoformat() if b.created_at else None,
+                    "send_at": b.send_at.isoformat() if b.send_at else None,
+                }
+                for b in items
+            ],
+            "total": len(items),
+        }
+
+    @app.post("/api/broadcast")
+    async def create_broadcast(
+        payload: BroadcastCreateRequest,
+        request: Request,
+        session: AsyncSession = Depends(_get_session),
+        _: None = Depends(require_auth),
+    ) -> Dict[str, Any]:
+        text_raw = (payload.text or "").strip()
+        if not text_raw:
+            raise HTTPException(status_code=400, detail="text is required")
+        send_at_raw = (payload.send_at or "").strip()
+        if not send_at_raw:
+            raise HTTPException(status_code=400, detail="send_at is required")
+        try:
+            # datetime-local gives "YYYY-MM-DDTHH:MM"
+            send_at_dt = datetime.fromisoformat(send_at_raw)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid send_at format")
+
+        msg = BroadcastMessage(text=text_raw, sent=0, send_at=send_at_dt)
+        session.add(msg)
+        await session.commit()
+        await session.refresh(msg)
+        return {"success": True, "id": int(msg.id)}
+
+    @app.delete("/api/broadcast/{msg_id}")
+    async def delete_broadcast(
+        msg_id: int,
+        request: Request,
+        session: AsyncSession = Depends(_get_session),
+        _: None = Depends(require_auth),
+    ) -> Dict[str, Any]:
+        ok = await BroadcastMessage.delete_by_id(session, int(msg_id))
+        await session.commit()
+        return {"success": bool(ok)}
+
+    # ============================================================
+    # Legacy dashboard parity: events / user journey / actions
+    # ============================================================
+
+    @app.get("/api/events")
+    async def list_events(
+        request: Request,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        user_id: Optional[int] = None,
+        action: Optional[str] = None,
+        limit: int = 200,
+        session: AsyncSession = Depends(_get_session),
+        _: None = Depends(require_auth),
+    ) -> Dict[str, Any]:
+        if limit <= 0 or limit > 1000:
+            raise HTTPException(status_code=400, detail="Invalid limit")
+        start_dt, end_dt = _range_bounds(start_date, end_date)
+
+        where = []
+        params: Dict[str, Any] = {}
+        if start_dt is not None:
+            where.append("e.timestamp >= :start_dt")
+            params["start_dt"] = start_dt
+        if end_dt is not None:
+            where.append("e.timestamp < :end_dt")
+            params["end_dt"] = end_dt
+        if user_id is not None:
+            where.append("e.user_id = :user_id")
+            params["user_id"] = int(user_id)
+        if action:
+            where.append("e.action = :action")
+            params["action"] = str(action)
+
+        where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+        params["limit"] = int(limit)
+
+        res = await session.execute(
+            text(
+                f"""
+                SELECT e.id, e.user_id, u.username, u.full_name, e.action, e.params, e.timestamp
+                FROM events e
+                LEFT JOIN users u ON e.user_id = u.user_id
+                {where_sql}
+                ORDER BY e.timestamp DESC
+                LIMIT :limit
+                """
+            ),
+            params,
+        )
+        items = []
+        for (e_id, e_user_id, username, full_name, e_action, e_params, ts) in res.all():
+            items.append(
+                {
+                    "id": int(e_id),
+                    "user_id": int(e_user_id) if e_user_id is not None else 0,
+                    "username": username,
+                    "full_name": full_name,
+                    "action": str(e_action or ""),
+                    "params": e_params,
+                    "timestamp": ts.isoformat() if ts else None,
+                    "desc": humanize_event(str(e_action or ""), e_params),
+                }
+            )
+        return {"items": items, "total": len(items)}
+
+    @app.get("/api/user-journey/{user_id}")
+    async def user_journey(
+        user_id: int,
+        request: Request,
+        limit: int = 1000,
+        session: AsyncSession = Depends(_get_session),
+        _: None = Depends(require_auth),
+    ) -> Dict[str, Any]:
+        if limit <= 0 or limit > 5000:
+            raise HTTPException(status_code=400, detail="Invalid limit")
+
+        ures = await session.execute(
+            text(
+                """
+                SELECT user_id, username, full_name, first_seen, last_active
+                FROM users WHERE user_id = :user_id
+                """
+            ),
+            {"user_id": int(user_id)},
+        )
+        u = ures.first()
+        user_payload = None
+        if u:
+            (uid, username, full_name, first_seen, last_active) = u
+            user_payload = {
+                "user_id": int(uid),
+                "username": username,
+                "full_name": full_name,
+                "first_seen": first_seen.isoformat() if first_seen else None,
+                "last_active": last_active.isoformat() if last_active else None,
+            }
+
+        eres = await session.execute(
+            text(
+                """
+                SELECT id, action, params, timestamp
+                FROM events
+                WHERE user_id = :user_id
+                ORDER BY timestamp ASC
+                LIMIT :limit
+                """
+            ),
+            {"user_id": int(user_id), "limit": int(limit)},
+        )
+        events = [
+            {
+                "id": int(eid),
+                "action": str(act or ""),
+                "params": params,
+                "timestamp": ts.isoformat() if ts else None,
+                "desc": humanize_event(str(act or ""), params),
+            }
+            for (eid, act, params, ts) in eres.all()
+        ]
+        return {"user": user_payload, "events": events, "total": len(events)}
+
+    @app.get("/api/actions")
+    async def actions(
+        request: Request,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        limit: int = 20,
+        sample_limit: int = 5000,
+        session: AsyncSession = Depends(_get_session),
+        _: None = Depends(require_auth),
+    ) -> Dict[str, Any]:
+        """
+        Returns top actions and top humanized actions.
+
+        We use a bounded sample window (sample_limit) for humanized grouping to keep it cheap.
+        """
+        if limit <= 0 or limit > 200:
+            raise HTTPException(status_code=400, detail="Invalid limit")
+        if sample_limit <= 0 or sample_limit > 50000:
+            raise HTTPException(status_code=400, detail="Invalid sample_limit")
+        start_dt, end_dt = _range_bounds(start_date, end_date)
+
+        where = []
+        params: Dict[str, Any] = {}
+        if start_dt is not None:
+            where.append("timestamp >= :start_dt")
+            params["start_dt"] = start_dt
+        if end_dt is not None:
+            where.append("timestamp < :end_dt")
+            params["end_dt"] = end_dt
+        where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+
+        # Top raw actions
+        params_top = dict(params)
+        params_top["limit"] = int(limit)
+        raw_res = await session.execute(
+            text(
+                f"""
+                SELECT action, COUNT(*) AS cnt
+                FROM events
+                {where_sql}
+                GROUP BY action
+                ORDER BY cnt DESC
+                LIMIT :limit
+                """
+            ),
+            params_top,
+        )
+        top_actions = [
+            {
+                "action": str(a or ""),
+                "desc": humanize_event(str(a or ""), None),
+                "count": int(c or 0),
+            }
+            for (a, c) in raw_res.all()
+        ]
+
+        # Humanized top actions from a sample window (most recent).
+        params_sample = dict(params)
+        params_sample["sample_limit"] = int(sample_limit)
+        sample_res = await session.execute(
+            text(
+                f"""
+                SELECT action, params
+                FROM events
+                {where_sql}
+                ORDER BY timestamp DESC
+                LIMIT :sample_limit
+                """
+            ),
+            params_sample,
+        )
+        counts: Dict[str, int] = {}
+        for (a, p) in sample_res.all():
+            desc = humanize_event(str(a or ""), p)
+            counts[desc] = counts.get(desc, 0) + 1
+        top_human = [
+            {"desc": k, "count": v}
+            for (k, v) in sorted(counts.items(), key=lambda kv: kv[1], reverse=True)[:limit]
+        ]
+
+        return {"top_actions": top_actions, "top_human": top_human}
 
     def _parse_event(message_text: str) -> Optional[Dict[str, Any]]:
         if not message_text or not message_text.startswith("event:"):

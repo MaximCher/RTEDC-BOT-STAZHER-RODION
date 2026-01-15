@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.dialog_message import DialogMessage
@@ -22,11 +24,16 @@ async def log_event(
     Store funnel events in dialog_messages so admin stats can query them easily.
     (No new tables/migrations required.)
     """
-    payload = {"event": event}
+    # Keep payload flat for compatibility with the legacy dashboard
+    # which expects keys like "label", "service", "step", etc. at top level.
+    payload: Dict[str, Any] = {"event": event}
     if service_key:
         payload["service"] = service_key
     if meta:
-        payload["meta"] = meta
+        try:
+            payload.update(dict(meta))
+        except Exception:
+            pass
 
     await DialogMessage.create(
         session,
@@ -39,5 +46,45 @@ async def log_event(
         chat_id=chat_id,
         message_id=None,
     )
+
+    # Also write into legacy dashboard tables (users/events) to keep
+    # RTEDC-BOT/dashboard working during migration.
+    try:
+        now = datetime.now(timezone.utc)
+        await session.execute(
+            text(
+                """
+                INSERT INTO users (user_id, username, full_name, first_seen, last_active)
+                VALUES (:user_id, :username, :full_name, :now, :now)
+                ON CONFLICT (user_id) DO UPDATE
+                SET username = EXCLUDED.username,
+                    full_name = EXCLUDED.full_name,
+                    last_active = EXCLUDED.last_active
+                """
+            ),
+            {
+                "user_id": int(user_id),
+                "username": username,
+                "full_name": None,
+                "now": now,
+            },
+        )
+        await session.execute(
+            text(
+                """
+                INSERT INTO events (user_id, action, params, timestamp)
+                VALUES (:user_id, :action, :params, :now)
+                """
+            ),
+            {
+                "user_id": int(user_id),
+                "action": str(event),
+                "params": json.dumps(payload, ensure_ascii=False),
+                "now": now,
+            },
+        )
+    except Exception:
+        # Non-blocking: dashboard tables are optional.
+        pass
 
 

@@ -13,6 +13,7 @@ from src.handlers import get_routers
 from src.logger import logger
 from src.middlewares.callback_serial import CallbackSerialMiddleware
 from src.services.heartbeat_service import heartbeat_loop
+from src.services.broadcast_service import broadcast_loop
 from src.services.webapp_menu_service import webapp_menu_button_sync_loop
 
 
@@ -70,6 +71,14 @@ async def run_bot(token: str) -> None:
                 interval_sec=20,
             )
         )
+        broadcast_task = asyncio.create_task(
+            broadcast_loop(
+                bot=bot,
+                session_factory=session_factory,
+                stop_event=stop_event,
+                interval_sec=30,
+            )
+        )
         await dp.start_polling(bot)
     except Exception as e:
         logger.error("bot_polling_failed", error=str(e))
@@ -82,6 +91,10 @@ async def run_bot(token: str) -> None:
             pass
         try:
             webapp_task.cancel()
+        except Exception:
+            pass
+        try:
+            broadcast_task.cancel()
         except Exception:
             pass
         await bot.session.close()

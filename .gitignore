@@ -24,5 +24,11 @@ python_bot/.secrets/
 # Cursor / Playwright artifacts
 .playwright-mcp/
 
+# Local multi-repo and sensitive artifacts
+external/
+*.dump
+*_access
+*_access.pub
+
 
 

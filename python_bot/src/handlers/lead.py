@@ -21,6 +21,7 @@ from src.models.user_memory import UserMemory
 from src.utils.funnel import log_event
 from src.utils.keyboards import (
     flow_nav_keyboard,
+    lead_services_keyboard,
     meeting_window_keyboard,
     services_keyboard,
     staff_ticket_keyboard,
@@ -130,6 +131,25 @@ async def lead_start(
     except Exception:
         pass
     service_key = (callback.data or "").split("lead:start:", 1)[-1].strip()
+
+    # Allow starting from global menus where a service isn't chosen yet.
+    # In this case we do NOT create a lead with "unknown" — we route user to service selection.
+    if not service_key or service_key not in SERVICES:
+        await state.clear()
+        await ui_upsert(
+            bot=callback.message.bot,
+            state=state,
+            chat_id=callback.message.chat.id,
+            prefer_message_id=callback.message.message_id,
+            text=msg("choose_service"),
+            reply_markup=lead_services_keyboard(),
+            keep_at_bottom=True,
+            persist=True,
+            session=session,
+            user_id=callback.from_user.id,
+            username=callback.from_user.username,
+        )
+        return
     await state.set_state(LeadForm.waiting_for_inn)
     await state.update_data(service_key=service_key)
     await log_event(
