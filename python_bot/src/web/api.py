@@ -159,55 +159,68 @@ def register_api(app: FastAPI) -> None:
 
         res = await session.execute(q)
         rows = res.mappings().all()
-        users = []
+        users_by_id: Dict[int, Dict[str, Any]] = {}
         for r in rows:
-            users.append(
-                {
-                    "user_id": int(r["user_id"]),
-                    "username": r["username"],
-                    "full_name": r["full_name"],
-                    "phone": r["phone"],
-                    "message_count": int(r["message_count"] or 0),
-                    "last_message_at": r["last_message_at"].isoformat()
-                    if r["last_message_at"]
-                    else None,
-                }
-            )
-        if not users:
-            where = []
-            params: Dict[str, Any] = {}
-            if start_dt is not None:
-                where.append("u.last_active >= :start_dt")
-                params["start_dt"] = start_dt
-            if end_dt is not None:
-                where.append("u.last_active < :end_dt")
-                params["end_dt"] = end_dt
-            where_sql = ("WHERE " + " AND ".join(where)) if where else ""
-            fallback_res = await session.execute(
-                text(
-                    f"""
-                    SELECT u.user_id, u.username, u.full_name, u.last_active
-                    FROM users u
-                    {where_sql}
-                    ORDER BY u.last_active DESC NULLS LAST
-                    LIMIT 5000
-                    """
-                ),
-                params,
-            )
-            users = [
-                {
-                    "user_id": int(uid),
-                    "username": username,
-                    "full_name": full_name,
-                    "phone": None,
-                    "message_count": 0,
-                    "last_message_at": last_active.isoformat()
-                    if last_active
-                    else None,
-                }
-                for (uid, username, full_name, last_active) in fallback_res.all()
-            ]
+            uid = int(r["user_id"])
+            users_by_id[uid] = {
+                "user_id": uid,
+                "username": r["username"],
+                "full_name": r["full_name"],
+                "phone": r["phone"],
+                "message_count": int(r["message_count"] or 0),
+                "last_message_at": r["last_message_at"].isoformat()
+                if r["last_message_at"]
+                else None,
+            }
+
+        # Merge in users table so legacy users appear even without dialog_messages.
+        where = []
+        params: Dict[str, Any] = {}
+        if start_dt is not None:
+            where.append("u.last_active >= :start_dt")
+            params["start_dt"] = start_dt
+        if end_dt is not None:
+            where.append("u.last_active < :end_dt")
+            params["end_dt"] = end_dt
+        where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+        fallback_res = await session.execute(
+            text(
+                f"""
+                SELECT u.user_id, u.username, u.full_name, u.last_active
+                FROM users u
+                {where_sql}
+                ORDER BY u.last_active DESC NULLS LAST
+                LIMIT 5000
+                """
+            ),
+            params,
+        )
+        for (uid, username, full_name, last_active) in fallback_res.all():
+            uid = int(uid)
+            if uid in users_by_id:
+                if not users_by_id[uid].get("username"):
+                    users_by_id[uid]["username"] = username
+                if not users_by_id[uid].get("full_name"):
+                    users_by_id[uid]["full_name"] = full_name
+                if not users_by_id[uid].get("last_message_at") and last_active:
+                    users_by_id[uid]["last_message_at"] = last_active.isoformat()
+                continue
+            users_by_id[uid] = {
+                "user_id": uid,
+                "username": username,
+                "full_name": full_name,
+                "phone": None,
+                "message_count": 0,
+                "last_message_at": last_active.isoformat()
+                if last_active
+                else None,
+            }
+
+        users = sorted(
+            users_by_id.values(),
+            key=lambda u: u.get("last_message_at") or "",
+            reverse=True,
+        )
         return {"users": users, "total": len(users)}
 
     @app.get("/api/conversation/{user_id}")
@@ -261,6 +274,10 @@ def register_api(app: FastAPI) -> None:
 
         dialogs_q = select(func.count(func.distinct(DialogMessage.user_id)))
         messages_q = select(func.count(DialogMessage.id))
+        users_q = select(func.count(func.distinct(text("u.user_id")))).select_from(
+            text("users u")
+        )
+        events_q = select(func.count(text("e.id"))).select_from(text("events e"))
         leads_q = select(func.count(BitrixLead.id))
         leads_by_service_q = select(BitrixLead.service, func.count(BitrixLead.id)).group_by(
             BitrixLead.service
@@ -285,21 +302,30 @@ def register_api(app: FastAPI) -> None:
             leads_q = leads_q.where(BitrixLead.created_at >= start_dt)
             leads_by_service_q = leads_by_service_q.where(BitrixLead.created_at >= start_dt)
             users_by_service_q = users_by_service_q.where(DialogMessage.created_at >= start_dt)
+            users_q = users_q.where(text("u.last_active >= :start_dt"))
+            events_q = events_q.where(text("e.timestamp >= :start_dt"))
         if end_dt is not None:
             dialogs_q = dialogs_q.where(DialogMessage.created_at < end_dt)
             messages_q = messages_q.where(DialogMessage.created_at < end_dt)
             leads_q = leads_q.where(BitrixLead.created_at < end_dt)
             leads_by_service_q = leads_by_service_q.where(BitrixLead.created_at < end_dt)
             users_by_service_q = users_by_service_q.where(DialogMessage.created_at < end_dt)
+            users_q = users_q.where(text("u.last_active < :end_dt"))
+            events_q = events_q.where(text("e.timestamp < :end_dt"))
 
         dialogs_total_res = await session.execute(dialogs_q)
         messages_total_res = await session.execute(messages_q)
+        users_total_res = await session.execute(users_q, {"start_dt": start_dt, "end_dt": end_dt})
+        events_total_res = await session.execute(events_q, {"start_dt": start_dt, "end_dt": end_dt})
         leads_total_res = await session.execute(leads_q)
         leads_by_service_res = await session.execute(leads_by_service_q)
         users_by_service_res = await session.execute(users_by_service_q)
 
         dialogs_total = int(dialogs_total_res.scalar() or 0)
+        users_total = int(users_total_res.scalar() or 0)
+        events_total = int(events_total_res.scalar() or 0)
         leads_total = int(leads_total_res.scalar() or 0)
+        dialogs_total = max(dialogs_total, users_total)
         conversion = (float(leads_total) / float(dialogs_total)) if dialogs_total else 0.0
 
         leads_by_service = {
@@ -311,7 +337,9 @@ def register_api(app: FastAPI) -> None:
 
         return {
             "dialogs_total": dialogs_total,
-            "messages_total": int(messages_total_res.scalar() or 0),
+            "messages_total": int(messages_total_res.scalar() or 0)
+            if int(messages_total_res.scalar() or 0) > 0
+            else events_total,
             "leads_total": leads_total,
             "conversion_rate": round(conversion, 4),
             "leads_by_service": leads_by_service,
@@ -502,7 +530,7 @@ def register_api(app: FastAPI) -> None:
         end_date: Optional[str] = None,
         user_id: Optional[int] = None,
         action: Optional[str] = None,
-        limit: int = 200,
+        limit: int = 20,
         session: AsyncSession = Depends(_get_session),
         _: None = Depends(require_auth),
     ) -> Dict[str, Any]:
