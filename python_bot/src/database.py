@@ -17,6 +17,7 @@ from src.config import settings
 from src.logger import logger
 
 Base = declarative_base()
+Base.metadata.schema = "public"
 
 _engine: Optional[AsyncEngine] = None
 _session_factory: Optional[async_sessionmaker[AsyncSession]] = None
