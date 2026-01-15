@@ -159,19 +159,55 @@ def register_api(app: FastAPI) -> None:
 
         res = await session.execute(q)
         rows = res.mappings().all()
-        users = [
-            {
-                "user_id": int(r["user_id"]),
-                "username": r["username"],
-                "full_name": r["full_name"],
-                "phone": r["phone"],
-                "message_count": int(r["message_count"] or 0),
-                "last_message_at": r["last_message_at"].isoformat()
-                if r["last_message_at"]
-                else None,
-            }
-            for r in rows
-        ]
+        users = []
+        for r in rows:
+            users.append(
+                {
+                    "user_id": int(r["user_id"]),
+                    "username": r["username"],
+                    "full_name": r["full_name"],
+                    "phone": r["phone"],
+                    "message_count": int(r["message_count"] or 0),
+                    "last_message_at": r["last_message_at"].isoformat()
+                    if r["last_message_at"]
+                    else None,
+                }
+            )
+        if not users:
+            where = []
+            params: Dict[str, Any] = {}
+            if start_dt is not None:
+                where.append("u.last_active >= :start_dt")
+                params["start_dt"] = start_dt
+            if end_dt is not None:
+                where.append("u.last_active < :end_dt")
+                params["end_dt"] = end_dt
+            where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+            fallback_res = await session.execute(
+                text(
+                    f"""
+                    SELECT u.user_id, u.username, u.full_name, u.last_active
+                    FROM users u
+                    {where_sql}
+                    ORDER BY u.last_active DESC NULLS LAST
+                    LIMIT 5000
+                    """
+                ),
+                params,
+            )
+            users = [
+                {
+                    "user_id": int(uid),
+                    "username": username,
+                    "full_name": full_name,
+                    "phone": None,
+                    "message_count": 0,
+                    "last_message_at": last_active.isoformat()
+                    if last_active
+                    else None,
+                }
+                for (uid, username, full_name, last_active) in fallback_res.all()
+            ]
         return {"users": users, "total": len(users)}
 
     @app.get("/api/conversation/{user_id}")
