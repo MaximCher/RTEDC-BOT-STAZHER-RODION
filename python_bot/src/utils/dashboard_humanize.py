@@ -34,6 +34,10 @@ ACTION_LABELS: Dict[str, str] = {
     "meeting_window_selected": "Выбрали время для созвона",
     "meeting_window_submitted": "Ввели время для созвона",
     "lead_created": "Лид создан",
+    "payment_link_created": "Сформирована ссылка на оплату",
+    "payment_paid": "Оплата подтверждена",
+    "payment_failed": "Ошибка оплаты",
+    "payment_callback_invalid": "Ошибка проверки оплаты",
 }
 
 SERVICE_LABELS: Dict[str, str] = {

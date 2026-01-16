@@ -268,6 +268,21 @@ def meeting_window_keyboard(include_back: bool = False) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def payment_link_keyboard(payment_url: str, payment_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="💳 Оплатить консультацию", url=payment_url)],
+            [
+                InlineKeyboardButton(
+                    text="🔄 Проверить оплату",
+                    callback_data=f"payment:check:{payment_id}",
+                )
+            ],
+            [InlineKeyboardButton(text="В главное меню", callback_data="menu:new")],
+        ]
+    )
+
+
 def staff_ticket_keyboard(ticket_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[

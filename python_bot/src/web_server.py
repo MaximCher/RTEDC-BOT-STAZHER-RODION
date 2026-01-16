@@ -46,6 +46,18 @@ def create_app() -> FastAPI:
         # Avoid noisy 404s in browsers; we don't ship a favicon yet.
         return Response(status_code=204)
 
+    @app.get("/payment/ok", response_class=HTMLResponse)
+    async def payment_ok() -> HTMLResponse:
+        return HTMLResponse(
+            "<h2>Оплата подтверждена</h2><p>Можно вернуться в Telegram.</p>"
+        )
+
+    @app.get("/payment/fail", response_class=HTMLResponse)
+    async def payment_fail() -> HTMLResponse:
+        return HTMLResponse(
+            "<h2>Оплата не завершена</h2><p>Проверьте платёж и попробуйте ещё раз.</p>"
+        )
+
     # Cookie-signed sessions for admin login (no in-memory session storage).
     app.add_middleware(
         SessionMiddleware,

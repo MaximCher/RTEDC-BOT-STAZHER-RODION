@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 from pydantic import AliasChoices, Field, field_validator  # type: ignore
@@ -68,6 +69,25 @@ class Settings(BaseSettings):
         "UF_CRM_SRV_SERVICE", alias="BITRIX_UF_SERVICE_KEY"
     )
 
+    # Uniteller платежи
+    uniteller_enabled: bool = Field(False, alias="UNITELLER_ENABLED")
+    uniteller_upid: str = Field("", alias="UNITELLER_UPID")
+    uniteller_password: str = Field("", alias="UNITELLER_PASSWORD")
+    uniteller_api_url: str = Field(
+        "https://api.uniteller.ru/simple/register", alias="UNITELLER_API_URL"
+    )
+    uniteller_order_lifetime: str = Field("", alias="UNITELLER_ORDER_LIFETIME")
+    uniteller_form_lifetime: str = Field("", alias="UNITELLER_FORM_LIFETIME")
+    uniteller_return_url: str = Field("", alias="UNITELLER_RETURN_URL")
+    uniteller_return_ok_url: str = Field("", alias="UNITELLER_RETURN_OK_URL")
+    uniteller_return_no_url: str = Field("", alias="UNITELLER_RETURN_NO_URL")
+    uniteller_callback_fields: str = Field("", alias="UNITELLER_CALLBACK_FIELDS")
+    uniteller_callback_format: str = Field("", alias="UNITELLER_CALLBACK_FORMAT")
+    uniteller_currency: str = Field("RUB", alias="UNITELLER_CURRENCY")
+    consultation_price_rub: Optional[Decimal] = Field(
+        default=None, alias="CONSULTATION_PRICE_RUB"
+    )
+
     # App
     log_level: str = Field("INFO", alias="LOG_LEVEL")
     debug_mode: bool = Field(False, alias="DEBUG_MODE")
@@ -97,6 +117,15 @@ class Settings(BaseSettings):
     )
     @classmethod
     def _empty_str_to_none(cls, v: Any) -> Any:
+        if v is None:
+            return None
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+    @field_validator("consultation_price_rub", mode="before")
+    @classmethod
+    def _price_empty_str_to_none(cls, v: Any) -> Any:
         if v is None:
             return None
         if isinstance(v, str) and not v.strip():
@@ -310,6 +339,21 @@ MESSAGES: Dict[str, str] = {
         "Спасибо! Заявка принята ✅\n"
         "Персональный менеджер SRVT свяжется с вами в ближайшее время "
         "(в рабочее время)."
+    ),
+    "lead_payment_prompt": (
+        "Для отправки заявки нужна оплата консультации. "
+        "Оплатите, пожалуйста, по кнопке ниже."
+    ),
+    "lead_payment_pending": (
+        "Оплата пока не подтверждена. Обычно это занимает 1–2 минуты."
+    ),
+    "lead_payment_error": (
+        "Не удалось сформировать ссылку на оплату. "
+        "Попробуйте позже или напишите менеджеру."
+    ),
+    "lead_payment_received": (
+        "Оплата подтверждена ✅\n"
+        "Заявка передана менеджеру."
     ),
     "subsidy_calc_intro": (
         "Ок, давайте рассчитаем ориентировочный объём субсидии.\n"

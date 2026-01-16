@@ -1,35 +1,34 @@
 from __future__ import annotations
 
-import hashlib
 import re
-from datetime import datetime, timedelta
 from typing import Optional, Tuple
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.bitrix import BitrixClient
-from src.config import SERVICES
-from src.models.bitrix_lead import BitrixLead
 from src.models.dialog_message import DialogMessage
-from src.models.lead_ticket import LeadTicket
-from src.models.staff import StaffMember
+from src.models.consultation_request import ConsultationRequest
+from src.models.payment import Payment
 from src.models.user_memory import UserMemory
+from src.services.payment_service import (
+    create_uniteller_payment,
+    finalize_paid_request,
+    get_payment_config,
+)
 from src.utils.funnel import log_event
 from src.utils.keyboards import (
     flow_nav_keyboard,
     lead_services_keyboard,
     meeting_window_keyboard,
+    payment_link_keyboard,
     services_keyboard,
-    staff_ticket_keyboard,
 )
 from src.utils.messages import msg
 from src.utils.rate_limit import FixedWindowRateLimiter
 from src.utils.service_entry import entry_screen_for_service
-from src.utils.ui_flow import format_step, ui_send_persistent, ui_upsert
+from src.utils.ui_flow import UI_MESSAGE_ID_KEY, format_step, ui_upsert
 
 router = Router()
 
@@ -44,6 +43,7 @@ class LeadForm(StatesGroup):
     waiting_for_inn = State()
     waiting_for_contact_data = State()
     waiting_for_meeting_window = State()
+    waiting_for_payment = State()
 
 
 @router.callback_query(F.data == "lead:back")
@@ -77,6 +77,23 @@ async def lead_back(
             reply_markup=kb,
             parse_mode=pm,
             keep_at_bottom=True,
+        )
+        return
+
+    if current == LeadForm.waiting_for_payment.state:
+        await state.clear()
+        await ui_upsert(
+            bot=callback.message.bot,
+            state=state,
+            chat_id=callback.message.chat.id,
+            prefer_message_id=callback.message.message_id,
+            text=msg("welcome"),
+            reply_markup=services_keyboard(),
+            keep_at_bottom=True,
+            persist=True,
+            session=session,
+            user_id=callback.from_user.id,
+            username=callback.from_user.username,
         )
         return
 
@@ -382,187 +399,126 @@ def _meeting_window_from_code(code: str) -> str:
     return mapping.get(code, "Не важно")
 
 
-async def _submit_lead(
+async def _start_payment_flow(
     *,
     session: AsyncSession,
+    state: FSMContext,
     bot,
-    user_id: int,
     chat_id: int,
+    user_id: int,
     service_key: str,
-    full_name: str | None,
-    phone: str | None,
-    username: str | None,
-    inn: str | None,
+    full_name: Optional[str],
+    phone: Optional[str],
+    username: Optional[str],
+    inn: Optional[str],
     summary_text: str,
     meeting_window: str,
-) -> bool:
-    # Dedupe: prevent duplicate Bitrix leads and staff spam on repeated submissions.
-    # Key is stable for the same lead payload.
-    norm = "|".join(
-        [
-            str(user_id),
-            (service_key or "").strip(),
-            (phone or "").strip(),
-            (inn or "").strip(),
-            (meeting_window or "").strip(),
-            (summary_text or "").strip(),
-        ]
+    prefer_message_id: Optional[int] = None,
+) -> None:
+    cfg = get_payment_config()
+    if not cfg:
+        await ui_upsert(
+            bot=bot,
+            state=state,
+            chat_id=chat_id,
+            prefer_message_id=prefer_message_id,
+            text=msg("lead_payment_error"),
+            reply_markup=services_keyboard(),
+            keep_at_bottom=True,
+            persist=True,
+            session=session,
+            user_id=user_id,
+            username=username,
+            full_name=full_name,
+            phone=phone,
+        )
+        return
+
+    request = ConsultationRequest(
+        user_id=user_id,
+        chat_id=chat_id,
+        service_key=service_key,
+        full_name=full_name,
+        phone=phone,
+        username=username,
+        inn=inn,
+        summary_text=summary_text,
+        meeting_window=meeting_window,
+        status="pending_payment",
     )
-    dedupe_key = hashlib.sha1(norm.encode("utf-8")).hexdigest()[:64]
-    try:
-        cutoff = datetime.utcnow() - timedelta(hours=12)
-        existing = (
-            await session.execute(
-                select(LeadTicket).where(
-                    LeadTicket.dedupe_key == dedupe_key,
-                    LeadTicket.created_at >= cutoff,
-                )
-            )
-        ).scalar_one_or_none()
-    except Exception:
-        existing = None
-    if existing:
+    session.add(request)
+    await session.flush()
+
+    payment = await create_uniteller_payment(session=session, request=request)
+    if not payment or not payment.payment_link or payment.status != "pending":
+        request.status = "payment_failed"
+        await session.commit()
         await log_event(
             session,
             user_id=user_id,
             chat_id=chat_id,
             username=username,
-            event="lead_deduped",
+            event="payment_failed",
             service_key=service_key,
-            meta={"ticket_id": int(existing.id)},
+            meta={"request_id": request.id},
         )
-        return False
+        await ui_upsert(
+            bot=bot,
+            state=state,
+            chat_id=chat_id,
+            prefer_message_id=prefer_message_id,
+            text=msg("lead_payment_error"),
+            reply_markup=services_keyboard(),
+            keep_at_bottom=True,
+            persist=True,
+            session=session,
+            user_id=user_id,
+            username=username,
+            full_name=full_name,
+            phone=phone,
+        )
+        return
 
-    comment_parts = []
-    if inn:
-        comment_parts.append(f"ИНН: {inn}")
-    if summary_text.strip():
-        comment_parts.append(summary_text.strip())
-    comment_parts.append(f"Время для встречи/созвона (МСК): {meeting_window}")
-    comment = "\n\n".join(comment_parts)
-
-    bitrix = BitrixClient()
-    result = await bitrix.create_lead(
-        full_name=full_name or f"Telegram {user_id}",
-        phone=phone or "",
+    request.payment_id = payment.id
+    await session.commit()
+    await log_event(
+        session,
+        user_id=user_id,
+        chat_id=chat_id,
+        username=username,
+        event="payment_link_created",
         service_key=service_key,
-        comment=comment,
+        meta={"payment_id": payment.id},
+    )
+
+    await state.set_state(LeadForm.waiting_for_payment)
+    await state.update_data(
+        payment_id=payment.id,
+        consultation_request_id=request.id,
+    )
+
+    amount_text = f"{cfg.amount:.2f} ₽"
+    text = f"{msg('lead_payment_prompt')}\n\nСумма: {amount_text}"
+    await ui_upsert(
+        bot=bot,
+        state=state,
+        chat_id=chat_id,
+        prefer_message_id=prefer_message_id,
+        text=text,
+        reply_markup=payment_link_keyboard(payment.payment_link, payment.id),
+        keep_at_bottom=True,
+        persist=True,
+        session=session,
         user_id=user_id,
         username=username,
+        full_name=full_name,
+        phone=phone,
     )
-
-    bitrix_lead_id: Optional[int] = None
-    if result.get("success") and result.get("lead_id"):
-        bitrix_lead_id = int(result["lead_id"])
-        try:
-            await BitrixLead.create(
-                session,
-                lead_id=bitrix_lead_id,
-                user_id=user_id,
-                full_name=full_name,
-                phone=phone,
-                service=service_key,
-            )
-        except Exception:
-            pass
-        await log_event(
-            session,
-            user_id=user_id,
-            chat_id=chat_id,
-            username=username,
-            event="lead_created",
-            service_key=service_key,
-            meta={"lead_id": bitrix_lead_id},
-        )
-    else:
-        # Important: Bitrix may be unconfigured during staging — still create internal ticket.
-        await log_event(
-            session,
-            user_id=user_id,
-            chat_id=chat_id,
-            username=username,
-            event="lead_created_bitrix_skipped",
-            service_key=service_key,
-            meta={
-                "error": (
-                    result.get("error")
-                    if isinstance(result, dict)
-                    else "unknown"
-                )
-            },
-        )
-
-    # Always create ticket for staff work (Bitrix is optional)
-    ticket = LeadTicket(
-        lead_user_id=user_id,
-        lead_chat_id=chat_id,
-        bitrix_lead_id=bitrix_lead_id,
-        service_key=service_key,
-        lead_full_name=full_name,
-        lead_phone=phone,
-        lead_username=username,
-        lead_inn=inn,
-        meeting_window=meeting_window,
-        summary_text=summary_text,
-        dedupe_key=dedupe_key,
-        status="new",
-        assigned_to_tg_user_id=None,
-        chat_enabled=0,
-    )
-    session.add(ticket)
-    await session.commit()
-    await session.refresh(ticket)
-
-    # Notify staff (admins + managers)
-    try:
-        res = await session.execute(
-            select(StaffMember).where(
-                StaffMember.role.in_(["admin", "manager"])
-            )
-        )
-        staff = list(res.scalars().all())
-    except Exception:
-        staff = []
-    if staff:
-        service_label = SERVICES.get(service_key, service_key)
-        lead_label = full_name or f"Telegram {user_id}"
-        inn_line = f"ИНН: {inn}" if inn else "ИНН: —"
-        phone_line = f"Телефон: {phone}" if phone else "Телефон: —"
-        mw_line = (
-            f"Время (МСК): {meeting_window}"
-            if meeting_window
-            else "Время (МСК): —"
-        )
-        if username:
-            tg_line = f"Telegram: @{username} (https://t.me/{username})"
-        else:
-            tg_line = f"Telegram: tg://user?id={user_id}"
-        bitrix_line = (
-            f"Bitrix lead_id: {bitrix_lead_id}"
-            if bitrix_lead_id
-            else "Bitrix lead_id: —"
-        )
-        staff_text = (
-            "Новый лид SRVT\n"
-            f"Услуга: {service_label}\n"
-            f"Лид: {lead_label}\n"
-            f"{tg_line}\n"
-            f"{inn_line}\n"
-            f"{phone_line}\n"
-            f"{mw_line}\n"
-            f"{bitrix_line}\n"
-            f"Тикет: #{ticket.id}"
-        )
-        for m in staff:
-            try:
-                await bot.send_message(
-                    chat_id=int(m.tg_user_id),
-                    text=staff_text,
-                    reply_markup=staff_ticket_keyboard(ticket.id),
-                )
-            except Exception:
-                continue
-    return True
+    data = await state.get_data()
+    prompt_id = data.get(UI_MESSAGE_ID_KEY)
+    if isinstance(prompt_id, int) and prompt_id > 0:
+        payment.prompt_message_id = prompt_id
+        await session.commit()
 
 
 @router.message(LeadForm.waiting_for_meeting_window)
@@ -613,11 +569,12 @@ async def lead_process_meeting_window(
         service_key=service_key,
         meta={"value": meeting_window},
     )
-    created = await _submit_lead(
+    await _start_payment_flow(
         session=session,
+        state=state,
         bot=message.bot,
-        user_id=user_id,
         chat_id=message.chat.id,
+        user_id=user_id,
         service_key=service_key,
         full_name=full_name,
         phone=phone,
@@ -625,23 +582,8 @@ async def lead_process_meeting_window(
         inn=inn,
         summary_text=summary_text,
         meeting_window=meeting_window,
+        prefer_message_id=message.message_id,
     )
-    await ui_send_persistent(
-        bot=message.bot,
-        state=state,
-        chat_id=message.chat.id,
-        text=msg("lead_received") if created else "Заявка уже принята ✅\n\nМенеджер свяжется с вами в рабочее время.",
-        reply_markup=services_keyboard(),
-        parse_mode=None,
-        delete_transient=False,
-        persist=True,
-        session=session,
-        user_id=user_id,
-        username=username,
-        full_name=full_name,
-        phone=phone,
-    )
-    await state.clear()
 
 
 @router.callback_query(F.data.startswith("lead:mw:"))
@@ -699,11 +641,12 @@ async def lead_meeting_window_pick(
         meta={"value": meeting_window},
     )
 
-    created = await _submit_lead(
+    await _start_payment_flow(
         session=session,
+        state=state,
         bot=callback.message.bot,
-        user_id=user_id,
         chat_id=callback.message.chat.id,
+        user_id=user_id,
         service_key=service_key,
         full_name=full_name,
         phone=phone,
@@ -711,25 +654,150 @@ async def lead_meeting_window_pick(
         inn=inn,
         summary_text=summary_text,
         meeting_window=meeting_window,
+        prefer_message_id=callback.message.message_id,
     )
+    await callback.answer()
 
-    await ui_send_persistent(
-        bot=callback.message.bot,
+
+@router.callback_query(F.data.startswith("payment:check:"))
+async def lead_payment_check(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    raw = (callback.data or "").split("payment:check:", 1)[-1].strip()
+    try:
+        payment_id = int(raw)
+    except ValueError:
+        await callback.answer("Не удалось проверить оплату.", show_alert=True)
+        return
+
+    payment = await session.get(Payment, payment_id)
+    if not payment:
+        await callback.answer("Оплата не найдена.", show_alert=True)
+        return
+
+    request = None
+    if payment.consultation_request_id:
+        request = await session.get(ConsultationRequest, payment.consultation_request_id)
+
+    if payment.status == "paid" and request:
+        await finalize_paid_request(session=session, payment=payment, request=request)
+        await ui_upsert(
+            bot=callback.message.bot,
+            state=state,
+            chat_id=callback.message.chat.id,
+            prefer_message_id=callback.message.message_id,
+            text=msg("lead_payment_received"),
+            reply_markup=services_keyboard(),
+            keep_at_bottom=True,
+            persist=True,
+            session=session,
+            user_id=callback.from_user.id,
+            username=callback.from_user.username,
+            full_name=request.full_name,
+            phone=request.phone,
+        )
+        await callback.answer()
+        await state.clear()
+        return
+
+    if not payment.payment_link:
+        await ui_upsert(
+            bot=callback.message.bot,
+            state=state,
+            chat_id=callback.message.chat.id,
+            prefer_message_id=callback.message.message_id,
+            text=msg("lead_payment_error"),
+            reply_markup=services_keyboard(),
+            keep_at_bottom=True,
+            persist=True,
+            session=session,
+            user_id=callback.from_user.id,
+            username=callback.from_user.username,
+        )
+    else:
+        await ui_upsert(
+            bot=callback.message.bot,
+            state=state,
+            chat_id=callback.message.chat.id,
+            prefer_message_id=callback.message.message_id,
+            text=msg("lead_payment_pending"),
+            reply_markup=payment_link_keyboard(payment.payment_link, payment.id),
+            keep_at_bottom=True,
+            persist=True,
+            session=session,
+            user_id=callback.from_user.id,
+            username=callback.from_user.username,
+        )
+    await callback.answer()
+
+
+@router.message(LeadForm.waiting_for_payment)
+async def lead_payment_pending(
+    message: Message, state: FSMContext, session: AsyncSession
+) -> None:
+    data = await state.get_data()
+    payment_id = data.get("payment_id")
+    if not isinstance(payment_id, int):
+        await message.answer(msg("lead_payment_pending"))
+        return
+
+    payment = await session.get(Payment, payment_id)
+    if not payment:
+        await message.answer(msg("lead_payment_pending"))
+        return
+
+    request = None
+    if payment.consultation_request_id:
+        request = await session.get(ConsultationRequest, payment.consultation_request_id)
+    if payment.status == "paid" and request:
+        await finalize_paid_request(session=session, payment=payment, request=request)
+        await ui_upsert(
+            bot=message.bot,
+            state=state,
+            chat_id=message.chat.id,
+            prefer_message_id=message.message_id,
+            text=msg("lead_payment_received"),
+            reply_markup=services_keyboard(),
+            keep_at_bottom=True,
+            persist=True,
+            session=session,
+            user_id=message.from_user.id,
+            username=message.from_user.username,
+            full_name=request.full_name,
+            phone=request.phone,
+        )
+        await state.clear()
+        return
+
+    if not payment.payment_link:
+        await ui_upsert(
+            bot=message.bot,
+            state=state,
+            chat_id=message.chat.id,
+            prefer_message_id=message.message_id,
+            text=msg("lead_payment_error"),
+            reply_markup=services_keyboard(),
+            keep_at_bottom=True,
+            persist=True,
+            session=session,
+            user_id=message.from_user.id,
+            username=message.from_user.username,
+        )
+        return
+
+    await ui_upsert(
+        bot=message.bot,
         state=state,
-        chat_id=callback.message.chat.id,
-        text=msg("lead_received") if created else "Заявка уже принята ✅\n\nМенеджер свяжется с вами в рабочее время.",
-        reply_markup=services_keyboard(),
-        parse_mode=None,
-        delete_transient=False,
+        chat_id=message.chat.id,
+        prefer_message_id=message.message_id,
+        text=msg("lead_payment_pending"),
+        reply_markup=payment_link_keyboard(payment.payment_link, payment.id),
+        keep_at_bottom=True,
         persist=True,
         session=session,
-        user_id=user_id,
-        username=username,
-        full_name=full_name,
-        phone=phone,
+        user_id=message.from_user.id,
+        username=message.from_user.username,
     )
-    await state.clear()
-    await callback.answer()
 
 
 PHONE_RE = re.compile(r"(\+?\d[\d\s\-\(\)]{7,}\d)")

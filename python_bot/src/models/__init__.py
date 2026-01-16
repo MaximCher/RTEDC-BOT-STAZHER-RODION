@@ -5,6 +5,9 @@ from src.models.broadcast_message import BroadcastMessage
 from src.models.dialog_message import DialogMessage
 from src.models.documents import Document
 from src.models.lead_ticket import LeadTicket
+from src.models.consultation_request import ConsultationRequest
+from src.models.payment import Payment
+from src.models.payment_event import PaymentEvent
 from src.models.required_subscription import RequiredSubscription
 from src.models.staff import StaffMember
 from src.models.staff_invite import StaffInvite
@@ -16,6 +19,9 @@ __all__ = [
     "Document",
     "BitrixLead",
     "LeadTicket",
+    "ConsultationRequest",
+    "Payment",
+    "PaymentEvent",
     "StaffMember",
     "StaffInvite",
     "BotHeartbeat",
