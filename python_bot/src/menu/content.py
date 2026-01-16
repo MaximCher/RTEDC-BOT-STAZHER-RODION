@@ -58,7 +58,6 @@ PAYMENTS_SUBSERVICES: list[tuple[str, str]] = [
         "Любые переводы для физических лиц, включая легализацию средств происхождения за рубежом",
         "sub_payments_personal",
     ),
-    ("Назад", "menu:new"),
 ]
 
 
