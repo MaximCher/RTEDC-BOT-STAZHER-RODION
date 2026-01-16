@@ -9,6 +9,8 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.config import SERVICES
+from src.menu.content import MENU_TEXT
+from src.menu.keyboards import main_menu_keyboard
 from src.models.consultation_request import ConsultationRequest
 from src.models.dialog_message import DialogMessage
 from src.models.payment import Payment
@@ -100,6 +102,20 @@ async def lead_back(
         return
 
     if current != LeadForm.waiting_for_meeting_window.state:
+        await state.clear()
+        await ui_upsert(
+            bot=callback.message.bot,
+            state=state,
+            chat_id=callback.message.chat.id,
+            prefer_message_id=callback.message.message_id,
+            text=MENU_TEXT,
+            reply_markup=main_menu_keyboard(),
+            keep_at_bottom=True,
+            persist=True,
+            session=session,
+            user_id=callback.from_user.id,
+            username=callback.from_user.username,
+        )
         return
 
     data = await state.get_data()
@@ -131,13 +147,37 @@ async def lead_back(
             total=3,
             question=msg("lead_contact_request"),
         ),
-        reply_markup=flow_nav_keyboard("lead:back"),
+        reply_markup=flow_nav_keyboard("lead:back", "lead:menu"),
         keep_at_bottom=True,
         persist=True,
         session=session,
         user_id=callback.from_user.id,
         username=callback.from_user.username,
     )
+
+
+@router.callback_query(F.data == "lead:menu")
+async def lead_menu_new(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    await state.clear()
+    await ui_upsert(
+        bot=callback.message.bot,
+        state=state,
+        chat_id=callback.message.chat.id,
+        prefer_message_id=callback.message.message_id,
+        text=MENU_TEXT,
+        reply_markup=main_menu_keyboard(),
+        keep_at_bottom=True,
+        persist=True,
+        session=session,
+        user_id=callback.from_user.id,
+        username=callback.from_user.username,
+    )
+    try:
+        await callback.answer()
+    except Exception:
+        pass
 
 
 @router.callback_query(F.data.startswith("lead:start:"))
@@ -191,7 +231,7 @@ async def lead_start(
             total=3,
             question=msg("lead_inn_request"),
         ),
-        reply_markup=flow_nav_keyboard("lead:back"),
+        reply_markup=flow_nav_keyboard("lead:back", "lead:menu"),
         keep_at_bottom=True,
         persist=True,
         session=session,
@@ -233,7 +273,7 @@ async def lead_process_inn(
                 ),
                 question=msg("lead_inn_request"),
             ),
-            reply_markup=flow_nav_keyboard("lead:back"),
+            reply_markup=flow_nav_keyboard("lead:back", "lead:menu"),
             keep_at_bottom=True,
             persist=True,
             session=session,
@@ -266,7 +306,7 @@ async def lead_process_inn(
             total=3,
             question=msg("lead_contact_request"),
         ),
-        reply_markup=flow_nav_keyboard("lead:back"),
+        reply_markup=flow_nav_keyboard("lead:back", "lead:menu"),
         keep_at_bottom=True,
         persist=True,
         session=session,
@@ -308,7 +348,7 @@ async def lead_process_contact(
                 ),
                 question=msg("lead_contact_request"),
             ),
-            reply_markup=flow_nav_keyboard("lead:back"),
+            reply_markup=flow_nav_keyboard("lead:back", "lead:menu"),
             keep_at_bottom=True,
             persist=True,
             session=session,

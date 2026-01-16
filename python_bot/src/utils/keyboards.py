@@ -17,7 +17,9 @@ def services_keyboard() -> InlineKeyboardMarkup:
     if row:
         rows.append(row)
     # Always allow exit to main menu from calculators hub.
-    rows.append([InlineKeyboardButton(text="В главное меню", callback_data="menu:new")])
+    rows.append(
+        [InlineKeyboardButton(text="В главное меню", callback_data="lead:menu")]
+    )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -40,7 +42,10 @@ def lead_services_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def flow_nav_keyboard(back_callback_data: str | None = None) -> InlineKeyboardMarkup:
+def flow_nav_keyboard(
+    back_callback_data: str | None = None,
+    menu_callback_data: str = "menu:new",
+) -> InlineKeyboardMarkup:
     """
     Navigation keyboard for multi-step flows.
     We prefer a consistent UX: show "Назад" + "В меню".
@@ -51,7 +56,11 @@ def flow_nav_keyboard(back_callback_data: str | None = None) -> InlineKeyboardMa
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="Назад", callback_data=back_cb)],
-            [InlineKeyboardButton(text="В главное меню", callback_data="menu:new")],
+            [
+                InlineKeyboardButton(
+                    text="В главное меню", callback_data=menu_callback_data
+                )
+            ],
         ]
     )
 
@@ -121,7 +130,7 @@ def subsidy_chat_keyboard(service_key: str) -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(text="Назад", callback_data=f"entry:new:{service_key}"),
             ],
-            [InlineKeyboardButton(text="В главное меню", callback_data="menu:new")],
+            [InlineKeyboardButton(text="В главное меню", callback_data="lead:menu")],
         ]
     )
 
