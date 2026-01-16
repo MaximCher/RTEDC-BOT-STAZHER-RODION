@@ -59,7 +59,7 @@ def service_menu_keyboard(
         [InlineKeyboardButton(text="✉️ Подать запрос", callback_data="apply")]
     )
     rows.append(
-        [InlineKeyboardButton(text="В главное меню", callback_data="menu:new")]
+        [InlineKeyboardButton(text="Назад", callback_data="menu:new")]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -71,6 +71,6 @@ def payments_submenu_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=name, callback_data=callback)]
         )
     keyboard.append(
-        [InlineKeyboardButton(text="В главное меню", callback_data="menu:new")]
+        [InlineKeyboardButton(text="Назад", callback_data="menu:new")]
     )
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
