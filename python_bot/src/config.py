@@ -79,13 +79,7 @@ class Settings(BaseSettings):
     uniteller_results_url: str = Field(
         "https://wpay.uniteller.ru/results/", alias="UNITELLER_RESULTS_URL"
     )
-    uniteller_results_login: str = Field("", alias="UNITELLER_RESULTS_LOGIN")
-    uniteller_results_password: str = Field(
-        "", alias="UNITELLER_RESULTS_PASSWORD"
-    )
-    uniteller_results_shop_id: str = Field(
-        "", alias="UNITELLER_RESULTS_SHOP_ID"
-    )
+    uniteller_login: str = Field("", alias="UNITELLER_LOGIN")
     uniteller_results_format: str = Field(
         "4", alias="UNITELLER_RESULTS_FORMAT"
     )

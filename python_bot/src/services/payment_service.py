@@ -33,9 +33,7 @@ class PaymentConfig:
     form_lifetime: str
     api_url: str
     results_url: str
-    results_login: Optional[str]
-    results_password: Optional[str]
-    results_shop_id: Optional[str]
+    login: Optional[str]
     results_format: str
 
 
@@ -58,9 +56,7 @@ def get_payment_config() -> Optional[PaymentConfig]:
         form_lifetime=settings.uniteller_form_lifetime or "",
         api_url=settings.uniteller_api_url,
         results_url=settings.uniteller_results_url,
-        results_login=settings.uniteller_results_login or None,
-        results_password=settings.uniteller_results_password or None,
-        results_shop_id=settings.uniteller_results_shop_id or None,
+        login=settings.uniteller_login or None,
         results_format=settings.uniteller_results_format or "4",
     )
 
@@ -166,11 +162,11 @@ async def poll_payment_status(
     cfg = get_payment_config()
     if not cfg:
         return None
-    login = cfg.results_login
+    login = cfg.login
     if not login:
         return None
-    shop_id = cfg.results_shop_id or cfg.upid
-    password = cfg.results_password or cfg.password
+    shop_id = cfg.upid
+    password = cfg.password
     client = UnitellerClient(
         api_url=cfg.api_url,
         upid=cfg.upid,
