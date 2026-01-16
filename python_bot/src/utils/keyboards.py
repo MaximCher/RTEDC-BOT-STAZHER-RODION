@@ -19,11 +19,7 @@ def services_keyboard() -> InlineKeyboardMarkup:
         rows.append(row)
     # Always allow exit to main menu from calculators hub.
     rows.append(
-        [
-            InlineKeyboardButton(
-                text="В главное меню", callback_data="menu:new"
-            )
-        ]
+        [InlineKeyboardButton(text="В главное меню", callback_data="menu:new")]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

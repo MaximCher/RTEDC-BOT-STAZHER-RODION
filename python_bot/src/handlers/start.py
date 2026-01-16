@@ -8,6 +8,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
     CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
     KeyboardButton,
     MenuButtonWebApp,
     Message,
@@ -21,7 +23,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.config import settings
 from src.menu.content import MENU_TEXT, WELCOME_TEXT
 from src.menu.keyboards import main_menu_keyboard
-from src.menu.rates import get_all_rates_table
 from src.models.app_setting import AppSetting
 from src.models.required_subscription import RequiredSubscription
 from src.models.staff import StaffMember
@@ -159,6 +160,61 @@ async def _maybe_request_contact(
     return True
 
 
+async def _open_menu_from_callback(
+    *,
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    text: str,
+) -> None:
+    await state.clear()
+    message = callback.message
+    if message is None:
+        try:
+            await callback.answer()
+        except Exception:
+            pass
+        return
+
+    allowed, missing, _ = await _check_gate(
+        bot=message.bot,
+        session=session,
+        user_id=callback.from_user.id,
+    )
+    if not allowed:
+        await message.answer(gate_text(missing), reply_markup=gate_keyboard(missing))
+        try:
+            await callback.answer()
+        except Exception:
+            pass
+        return
+
+    requested = await _maybe_request_contact(message, state, session)
+    if requested:
+        try:
+            await callback.answer()
+        except Exception:
+            pass
+        return
+
+    try:
+        await message.edit_text(text, reply_markup=main_menu_keyboard())
+    except Exception:
+        try:
+            sent = await message.answer(text, reply_markup=main_menu_keyboard())
+            try:
+                await message.delete()
+            except Exception:
+                pass
+            message = sent
+        except Exception:
+            pass
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+
+
 async def _render_menu(
     message: Message, state: FSMContext, session: AsyncSession
 ) -> None:
@@ -218,9 +274,7 @@ async def _render_menu(
     if requested:
         return
 
-    await message.answer(
-        WELCOME_TEXT, reply_markup=main_menu_keyboard()
-    )
+    await message.answer(WELCOME_TEXT, reply_markup=main_menu_keyboard())
 
 
 async def _render_main_menu(
@@ -291,7 +345,7 @@ async def cmd_menu(
         message,
         state,
         session,
-        text=LEGACY_MENU_TEXT,
+        text=MENU_TEXT,
         event="menu",
     )
 
@@ -304,43 +358,12 @@ async def back_to_main(
     Legacy callback used by old keyboards. Route it through gate/contacts and
     render menu, стараясь редактировать/заменять сообщение без спама.
     """
-    allowed, missing, _ = await _check_gate(
-        bot=callback.message.bot,
+    await _open_menu_from_callback(
+        callback=callback,
+        state=state,
         session=session,
-        user_id=callback.from_user.id,
+        text=MENU_TEXT,
     )
-    if not allowed:
-        await callback.message.answer(
-            gate_text(missing), reply_markup=gate_keyboard(missing)
-        )
-        try:
-            await callback.answer()
-        except Exception:
-            pass
-        return
-    requested = await _maybe_request_contact(callback.message, state, session)
-    if not requested:
-        await state.clear()
-        try:
-            await callback.message.edit_text(
-                MENU_TEXT, reply_markup=main_menu_keyboard()
-            )
-        except Exception:
-            try:
-                sent = await callback.message.answer(
-                    MENU_TEXT, reply_markup=main_menu_keyboard()
-                )
-                try:
-                    await callback.message.delete()
-                except Exception:
-                    pass
-                callback.message = sent  # best effort to keep thread tidy
-            except Exception:
-                pass
-    try:
-        await callback.answer()
-    except Exception:
-        pass
 
 
 @router.message(Command("currency"))
@@ -470,57 +493,12 @@ async def back_to_menu(
 ) -> None:
     # UX: keep Telegram "loading" animation on the pressed button.
     # We'll answer the callback after UI is rendered.
-    await state.clear()
-    allowed, missing, _ = await _check_gate(
-        bot=callback.message.bot,
+    await _open_menu_from_callback(
+        callback=callback,
+        state=state,
         session=session,
-        user_id=callback.from_user.id,
+        text=MENU_TEXT,
     )
-    if not allowed:
-        try:
-            await callback.message.edit_text(
-                gate_text(missing), reply_markup=gate_keyboard(missing)
-            )
-        except Exception:
-            await callback.message.answer(
-                gate_text(missing), reply_markup=gate_keyboard(missing)
-            )
-        try:
-            await callback.answer()
-        except Exception:
-            pass
-        return
-    # UX: avoid chat spam. Prefer re-rendering menu in the same message.
-    try:
-        await callback.message.edit_text(
-            WELCOME_TEXT, reply_markup=main_menu_keyboard()
-        )
-        try:
-            await callback.answer()
-        except Exception:
-            pass
-        return
-    except Exception:
-        pass
-
-    # Fallback: if message can't be edited (too old, etc.) delete & send one fresh menu.
-    chat_id = callback.message.chat.id
-    try:
-        await callback.message.delete()
-    except Exception:
-        pass
-    try:
-        await callback.message.bot.send_message(
-            chat_id,
-            LEGACY_WELCOME_TEXT,
-            reply_markup=main_menu_keyboard(),
-        )
-    except Exception:
-        pass
-    try:
-        await callback.answer()
-    except Exception:
-        pass
 
 
 @router.callback_query(F.data == "menu:new")
@@ -528,43 +506,12 @@ async def open_menu_new_message(
     callback: CallbackQuery, state: FSMContext, session: AsyncSession
 ) -> None:
     """Open menu, предпочитая редактирование сообщения, чтобы не плодить новые."""
-    await state.clear()
-    allowed, missing, _ = await _check_gate(
-        bot=callback.message.bot,
+    await _open_menu_from_callback(
+        callback=callback,
+        state=state,
         session=session,
-        user_id=callback.from_user.id,
+        text=MENU_TEXT,
     )
-    if not allowed:
-        await callback.message.answer(
-            gate_text(missing), reply_markup=gate_keyboard(missing)
-        )
-    else:
-        requested = await _maybe_request_contact(
-            callback.message, state, session
-        )
-        if not requested:
-            try:
-                await callback.message.edit_text(
-                    LEGACY_WELCOME_TEXT,
-                    reply_markup=main_menu_keyboard(),
-                )
-            except Exception:
-                try:
-                    sent = await callback.message.answer(
-                        LEGACY_WELCOME_TEXT,
-                        reply_markup=main_menu_keyboard(),
-                    )
-                    try:
-                        await callback.message.delete()
-                    except Exception:
-                        pass
-                    callback.message = sent
-                except Exception:
-                    pass
-    try:
-        await callback.answer()
-    except Exception:
-        pass
 
 
 @router.callback_query(F.data == "srvt:services")
