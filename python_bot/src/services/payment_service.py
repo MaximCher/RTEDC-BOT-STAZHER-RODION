@@ -8,9 +8,7 @@ from typing import Any, Dict, Optional, Tuple
 from uuid import uuid4
 
 from aiogram import Bot
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.config import settings
 from src.models.consultation_request import ConsultationRequest
 from src.models.payment import Payment
@@ -18,10 +16,8 @@ from src.models.payment_event import PaymentEvent
 from src.services.consultation_service import submit_consultation
 from src.services.uniteller_service import (
     UnitellerClient,
-    build_callback_signature,
     build_return_url,
     current_date_msk,
-    normalize_callback_payload,
 )
 from src.utils.funnel import log_event
 
@@ -36,11 +32,6 @@ class PaymentConfig:
     order_lifetime: str
     form_lifetime: str
     api_url: str
-    return_url: Optional[str]
-    return_ok_url: Optional[str]
-    return_no_url: Optional[str]
-    callback_fields: Optional[str]
-    callback_format: Optional[str]
     results_url: str
     results_login: Optional[str]
     results_password: Optional[str]
@@ -66,11 +57,6 @@ def get_payment_config() -> Optional[PaymentConfig]:
         order_lifetime=settings.uniteller_order_lifetime or "24:00",
         form_lifetime=settings.uniteller_form_lifetime or "",
         api_url=settings.uniteller_api_url,
-        return_url=settings.uniteller_return_url or None,
-        return_ok_url=settings.uniteller_return_ok_url or None,
-        return_no_url=settings.uniteller_return_no_url or None,
-        callback_fields=settings.uniteller_callback_fields or None,
-        callback_format=settings.uniteller_callback_format or None,
         results_url=settings.uniteller_results_url,
         results_login=settings.uniteller_results_login or None,
         results_password=settings.uniteller_results_password or None,
@@ -104,9 +90,9 @@ async def create_uniteller_payment(
         return None
 
     ok_url, fail_url = _build_default_return_urls()
-    url_return_ok = cfg.return_ok_url or ok_url
-    url_return_no = cfg.return_no_url or fail_url
-    url_return = cfg.return_url
+    url_return_ok = ok_url
+    url_return_no = fail_url
+    url_return = None
 
     order_id = _make_order_id(request.id)
     payment = Payment(
@@ -116,8 +102,6 @@ async def create_uniteller_payment(
         amount=cfg.amount,
         currency=cfg.currency,
         status="pending",
-        callback_fields=cfg.callback_fields,
-        callback_format=cfg.callback_format,
         consultation_request_id=request.id,
     )
     session.add(payment)
@@ -138,8 +122,6 @@ async def create_uniteller_payment(
             url_return=url_return,
             url_return_ok=url_return_ok,
             url_return_no=url_return_no,
-            callback_fields=cfg.callback_fields,
-            callback_format=cfg.callback_format,
             currency=cfg.currency,
         )
     except Exception as exc:
@@ -224,88 +206,6 @@ async def poll_payment_status(
         payment.paid_at = datetime.utcnow()
     await session.flush()
     return status
-
-
-async def handle_uniteller_callback(
-    *,
-    session: AsyncSession,
-    payload: Dict[str, Any],
-) -> Tuple[bool, Optional[Payment], Optional[ConsultationRequest]]:
-    cfg = get_payment_config()
-    if not cfg:
-        return False, None, None
-
-    normalized = normalize_callback_payload(payload)
-    order_id = normalized.get("Order_ID") or normalized.get("OrderID") or ""
-    status = normalized.get("Status") or ""
-    signature = normalized.get("Signature") or ""
-
-    if not order_id or not status or not signature:
-        return False, None, None
-
-    payment = (
-        await session.execute(
-            select(Payment).where(Payment.order_id == order_id)
-        )
-    ).scalar_one_or_none()
-    if not payment:
-        return False, None, None
-
-    callback_fields = (payment.callback_fields or "").strip()
-    fields = []
-    if callback_fields:
-        for item in callback_fields.split():
-            fields.append(normalized.get(item, ""))
-
-    expected_sig = build_callback_signature(
-        order_id=order_id,
-        status=status,
-        fields=fields,
-        password=cfg.password,
-    )
-    if signature.upper() != expected_sig.upper():
-        await record_payment_event(
-            session,
-            payment.id,
-            "callback_invalid_signature",
-            normalized,
-        )
-        if payment.consultation_request_id:
-            req = await session.get(
-                ConsultationRequest, payment.consultation_request_id
-            )
-            if req:
-                await log_event(
-                    session,
-                    user_id=req.user_id,
-                    chat_id=req.chat_id,
-                    username=req.username,
-                    event="payment_callback_invalid",
-                    service_key=req.service_key,
-                    meta={"payment_id": payment.id},
-                )
-        return False, payment, None
-
-    await record_payment_event(
-        session,
-        payment.id,
-        "callback_received",
-        normalized,
-    )
-
-    payment.status = status.lower()
-    if payment.status == "paid":
-        payment.paid_at = datetime.utcnow()
-    await session.flush()
-
-    request = (
-        await session.execute(
-            select(ConsultationRequest).where(
-                ConsultationRequest.id == payment.consultation_request_id
-            )
-        )
-    ).scalar_one_or_none()
-    return True, payment, request
 
 
 async def finalize_paid_request(

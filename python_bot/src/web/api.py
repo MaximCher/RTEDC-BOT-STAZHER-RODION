@@ -6,7 +6,6 @@ import io
 import json
 from typing import Any, Dict, Optional
 
-from aiogram import Bot
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
@@ -27,9 +26,6 @@ from src.models.broadcast_message import BroadcastMessage
 from src.utils.webapp_url import get_webapp_public_url
 from src.utils.telegram_links import parse_tme_url
 from src.utils.dashboard_humanize import humanize_event
-from src.utils.messages import msg
-from src.utils.keyboards import services_keyboard
-from src.services.payment_service import handle_uniteller_callback, finalize_paid_request
 from src.web.auth import (
     SESSION_KEY,
     require_auth,
@@ -98,54 +94,6 @@ async def _get_session() -> AsyncSession:
 
 
 def register_api(app: FastAPI) -> None:
-    @app.post("/payments/uniteller/callback")
-    async def uniteller_callback(
-        request: Request, session: AsyncSession = Depends(_get_session)
-    ) -> Response:
-        content_type = (request.headers.get("content-type") or "").lower()
-        if "application/json" in content_type:
-            payload = await request.json()
-        else:
-            form = await request.form()
-            payload = dict(form)
-        if not isinstance(payload, dict):
-            payload = {}
-
-        ok, payment, consult_req = await handle_uniteller_callback(
-            session=session, payload=payload
-        )
-        if not ok:
-            raise HTTPException(status_code=400, detail="Invalid callback signature")
-
-        if payment and consult_req and payment.status == "paid":
-            was_submitted = consult_req.status == "submitted"
-            await finalize_paid_request(
-                session=session, payment=payment, request=consult_req
-            )
-            if not was_submitted:
-                try:
-                    bot = Bot(token=settings.telegram_bot_token)
-                    if payment.prompt_message_id:
-                        await bot.edit_message_text(
-                            chat_id=consult_req.chat_id,
-                            message_id=payment.prompt_message_id,
-                            text=msg("lead_payment_received"),
-                            reply_markup=services_keyboard(),
-                        )
-                    else:
-                        await bot.send_message(
-                            chat_id=consult_req.chat_id,
-                            text=msg("lead_payment_received"),
-                            reply_markup=services_keyboard(),
-                        )
-                    await bot.session.close()
-                except Exception:
-                    pass
-        else:
-            await session.commit()
-
-        return Response(status_code=200)
-
     async def _resolve_bot_username(session: AsyncSession) -> Optional[str]:
         # Prefer DB heartbeat (no extra network calls).
         try:

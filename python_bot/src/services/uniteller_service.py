@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from decimal import Decimal, ROUND_HALF_UP
-from typing import Any, Dict, Iterable, Optional
+from decimal import ROUND_HALF_UP, Decimal
+from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
 import httpx
@@ -72,29 +71,6 @@ def build_register_signature(
         + _sha256_ascii(password)
     )
     return _sha256_ascii(payload).upper()
-
-
-def build_callback_signature(
-    *,
-    order_id: str,
-    status: str,
-    fields: Iterable[str],
-    password: str,
-) -> str:
-    raw = order_id + status + "".join(fields) + password
-    return _md5_utf8(raw).upper()
-
-
-def normalize_callback_payload(payload: Dict[str, Any]) -> Dict[str, str]:
-    normalized: Dict[str, str] = {}
-    for key, value in payload.items():
-        if value is None:
-            continue
-        if isinstance(value, (dict, list)):
-            normalized[key] = json.dumps(value, ensure_ascii=False)
-        else:
-            normalized[key] = str(value)
-    return normalized
 
 
 class UnitellerClient:

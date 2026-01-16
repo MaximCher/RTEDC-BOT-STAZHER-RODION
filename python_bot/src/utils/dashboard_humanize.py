@@ -37,7 +37,6 @@ ACTION_LABELS: Dict[str, str] = {
     "payment_link_created": "Сформирована ссылка на оплату",
     "payment_paid": "Оплата подтверждена",
     "payment_failed": "Ошибка оплаты",
-    "payment_callback_invalid": "Ошибка проверки оплаты",
 }
 
 SERVICE_LABELS: Dict[str, str] = {

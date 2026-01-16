@@ -9,8 +9,8 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.config import SERVICES
-from src.models.dialog_message import DialogMessage
 from src.models.consultation_request import ConsultationRequest
+from src.models.dialog_message import DialogMessage
 from src.models.payment import Payment
 from src.models.user_memory import UserMemory
 from src.services.payment_service import (
