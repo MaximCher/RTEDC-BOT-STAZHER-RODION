@@ -42,6 +42,7 @@ from src.services.currency_rates_service import (
     get_fast_snapshot,
     get_full_snapshot,
 )
+from src.services.events_service import get_latest_event_card
 from src.services.staff_service import is_staff
 from src.utils.access_gate import gate_keyboard, gate_text
 from src.utils.funnel import log_event
@@ -379,44 +380,28 @@ async def menu_events(
         event="event_view",
         meta={"label": "Просмотр информации о мероприятии"},
     )
+    card = await get_latest_event_card()
+    event_text = EVENT_INFO
+    event_url = "https://t.me/rtedc_org"
+    if card:
+        event_text = card.text
+        event_url = card.url or event_url
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="Участвовать", url=event_url),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="В главное меню", callback_data="menu:new"
+                )
+            ],
+        ]
+    )
     try:
-        await callback.message.edit_text(
-            EVENT_INFO,
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text="Участвовать",
-                            url="https://t.me/rtedc_org/921",
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            text="В главное меню", callback_data="menu:new"
-                        )
-                    ],
-                ]
-            ),
-        )
+        await callback.message.edit_text(event_text, reply_markup=kb)
     except Exception:
-        await callback.message.answer(
-            EVENT_INFO,
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text="Участвовать",
-                            url="https://t.me/rtedc_org/921",
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            text="В главное меню", callback_data="menu:new"
-                        )
-                    ],
-                ]
-            ),
-        )
+        await callback.message.answer(event_text, reply_markup=kb)
     try:
         await callback.answer()
     except Exception:
