@@ -76,13 +76,32 @@ class Settings(BaseSettings):
     uniteller_api_url: str = Field(
         "https://api.uniteller.ru/simple/register", alias="UNITELLER_API_URL"
     )
+    uniteller_results_url: str = Field(
+        "https://wpay.uniteller.ru/results/", alias="UNITELLER_RESULTS_URL"
+    )
+    uniteller_results_login: str = Field(
+        "", alias="UNITELLER_RESULTS_LOGIN"
+    )
+    uniteller_results_password: str = Field(
+        "", alias="UNITELLER_RESULTS_PASSWORD"
+    )
+    uniteller_results_shop_id: str = Field(
+        "", alias="UNITELLER_RESULTS_SHOP_ID"
+    )
+    uniteller_results_format: str = Field(
+        "4", alias="UNITELLER_RESULTS_FORMAT"
+    )
     uniteller_order_lifetime: str = Field("", alias="UNITELLER_ORDER_LIFETIME")
     uniteller_form_lifetime: str = Field("", alias="UNITELLER_FORM_LIFETIME")
     uniteller_return_url: str = Field("", alias="UNITELLER_RETURN_URL")
     uniteller_return_ok_url: str = Field("", alias="UNITELLER_RETURN_OK_URL")
     uniteller_return_no_url: str = Field("", alias="UNITELLER_RETURN_NO_URL")
-    uniteller_callback_fields: str = Field("", alias="UNITELLER_CALLBACK_FIELDS")
-    uniteller_callback_format: str = Field("", alias="UNITELLER_CALLBACK_FORMAT")
+    uniteller_callback_fields: str = Field(
+        "", alias="UNITELLER_CALLBACK_FIELDS"
+    )
+    uniteller_callback_format: str = Field(
+        "", alias="UNITELLER_CALLBACK_FORMAT"
+    )
     uniteller_currency: str = Field("RUB", alias="UNITELLER_CURRENCY")
     consultation_price_rub: Optional[Decimal] = Field(
         default=None, alias="CONSULTATION_PRICE_RUB"

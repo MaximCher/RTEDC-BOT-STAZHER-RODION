@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
@@ -188,3 +189,41 @@ class UnitellerClient:
             raw=data,
         )
 
+    async def get_payment_status(
+        self,
+        *,
+        results_url: str,
+        shop_id: str,
+        login: str,
+        password: str,
+        format_code: str,
+        shop_order_number: str,
+    ) -> tuple[Optional[str], str]:
+        payload = {
+            "Shop_ID": shop_id,
+            "Login": login,
+            "Password": password,
+            "Format": format_code,
+            "ShopOrderNumber": shop_order_number,
+        }
+        async with httpx.AsyncClient(timeout=self.timeout_sec) as client:
+            resp = await client.post(results_url, data=payload)
+            resp.raise_for_status()
+            body = resp.text or ""
+        status = _extract_status(body)
+        return status, body
+
+
+_STATUS_RE = re.compile(
+    r"status[^a-z]*(waiting|not authorized|authorized|paid|canceled)",
+    re.IGNORECASE,
+)
+
+
+def _extract_status(payload: str) -> Optional[str]:
+    if not payload:
+        return None
+    match = _STATUS_RE.search(payload)
+    if not match:
+        return None
+    return match.group(1).strip().lower()

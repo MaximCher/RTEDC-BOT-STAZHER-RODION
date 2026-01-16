@@ -8,6 +8,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
+from src.config import SERVICES
 from src.models.dialog_message import DialogMessage
 from src.models.consultation_request import ConsultationRequest
 from src.models.payment import Payment
@@ -16,6 +17,7 @@ from src.services.payment_service import (
     create_uniteller_payment,
     finalize_paid_request,
     get_payment_config,
+    poll_payment_status,
 )
 from src.utils.funnel import log_event
 from src.utils.keyboards import (
@@ -150,7 +152,8 @@ async def lead_start(
     service_key = (callback.data or "").split("lead:start:", 1)[-1].strip()
 
     # Allow starting from global menus where a service isn't chosen yet.
-    # In this case we do NOT create a lead with "unknown" — we route user to service selection.
+    # In this case we do NOT create a lead with "unknown" — we route user
+    # to service selection.
     if not service_key or service_key not in SERVICES:
         await state.clear()
         await ui_upsert(
@@ -224,7 +227,10 @@ async def lead_process_inn(
                 title="SRVT • Заявка на консультацию",
                 step=1,
                 total=3,
-                intro="Ошибка: не вижу ИНН. Пришлите 10 или 12 цифр (без пробелов).",
+                intro=(
+                    "Ошибка: не вижу ИНН. Пришлите 10 или 12 цифр "
+                    "(без пробелов)."
+                ),
                 question=msg("lead_inn_request"),
             ),
             reply_markup=flow_nav_keyboard("lead:back"),
@@ -296,7 +302,10 @@ async def lead_process_contact(
                 title="SRVT • Заявка на консультацию",
                 step=2,
                 total=3,
-                intro="Ошибка: не вижу телефон. Пример: Иванов Иван +79991234567",
+                intro=(
+                    "Ошибка: не вижу телефон. Пример: Иванов Иван "
+                    "+79991234567"
+                ),
                 question=msg("lead_contact_request"),
             ),
             reply_markup=flow_nav_keyboard("lead:back"),
@@ -314,7 +323,10 @@ async def lead_process_contact(
             bot=message.bot,
             state=state,
             chat_id=message.chat.id,
-            text="Слишком много заявок за минуту. Пожалуйста, попробуйте чуть позже.",
+            text=(
+                "Слишком много заявок за минуту. "
+                "Пожалуйста, попробуйте чуть позже."
+            ),
             reply_markup=services_keyboard(),
             parse_mode=None,
             keep_at_bottom=True,
@@ -677,10 +689,17 @@ async def lead_payment_check(
 
     request = None
     if payment.consultation_request_id:
-        request = await session.get(ConsultationRequest, payment.consultation_request_id)
+        request = await session.get(
+            ConsultationRequest, payment.consultation_request_id
+        )
+
+    if payment.status != "paid":
+        await poll_payment_status(session=session, payment=payment)
 
     if payment.status == "paid" and request:
-        await finalize_paid_request(session=session, payment=payment, request=request)
+        await finalize_paid_request(
+            session=session, payment=payment, request=request
+        )
         await ui_upsert(
             bot=callback.message.bot,
             state=state,
@@ -721,7 +740,9 @@ async def lead_payment_check(
             chat_id=callback.message.chat.id,
             prefer_message_id=callback.message.message_id,
             text=msg("lead_payment_pending"),
-            reply_markup=payment_link_keyboard(payment.payment_link, payment.id),
+            reply_markup=payment_link_keyboard(
+                payment.payment_link, payment.id
+            ),
             keep_at_bottom=True,
             persist=True,
             session=session,
@@ -746,11 +767,18 @@ async def lead_payment_pending(
         await message.answer(msg("lead_payment_pending"))
         return
 
+    if payment.status != "paid":
+        await poll_payment_status(session=session, payment=payment)
+
     request = None
     if payment.consultation_request_id:
-        request = await session.get(ConsultationRequest, payment.consultation_request_id)
+        request = await session.get(
+            ConsultationRequest, payment.consultation_request_id
+        )
     if payment.status == "paid" and request:
-        await finalize_paid_request(session=session, payment=payment, request=request)
+        await finalize_paid_request(
+            session=session, payment=payment, request=request
+        )
         await ui_upsert(
             bot=message.bot,
             state=state,
