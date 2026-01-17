@@ -372,6 +372,11 @@ async def menu_events(
         except Exception:
             pass
         return
+    # Answer early to avoid endless loading if remote fetch stalls.
+    try:
+        await callback.answer("Загружаю карточку…")
+    except Exception:
+        pass
     await log_event(
         session,
         user_id=callback.from_user.id,
@@ -380,7 +385,11 @@ async def menu_events(
         event="event_view",
         meta={"label": "Просмотр информации о мероприятии"},
     )
-    card = await get_latest_event_card()
+    card = None
+    try:
+        card = await asyncio.wait_for(get_latest_event_card(), timeout=6.0)
+    except Exception:
+        card = None
     event_text = EVENT_INFO
     event_url = "https://t.me/rtedc_org"
     if card:
@@ -402,10 +411,6 @@ async def menu_events(
         await callback.message.edit_text(event_text, reply_markup=kb)
     except Exception:
         await callback.message.answer(event_text, reply_markup=kb)
-    try:
-        await callback.answer()
-    except Exception:
-        pass
 
 
 @router.callback_query(F.data == "currency_rates")
