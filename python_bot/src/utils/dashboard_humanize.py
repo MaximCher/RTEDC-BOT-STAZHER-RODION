@@ -128,4 +128,3 @@ def humanize_event(action: str, params: Any) -> str:
         return f"{label}: {data}"
 
     return f"{label}: {p}"
-

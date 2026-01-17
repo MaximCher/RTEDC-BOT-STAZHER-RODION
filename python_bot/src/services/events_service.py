@@ -1,18 +1,19 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from html import unescape
-import re
 from typing import Optional
+from urllib.parse import unquote, urlparse, urlunparse
 
 import httpx
-from bs4 import BeautifulSoup
-
+from bs4 import BeautifulSoup, NavigableString
 from src.logger import logger
 
 _MSK_TZ = timezone(timedelta(hours=3))
 _CACHE_TTL_SEC = 300
+_MAX_EVENT_TEXT_LEN = 3000
 
 _EVENT_KEYWORDS = (
     "событи",
@@ -25,6 +26,17 @@ _EVENT_KEYWORDS = (
     "симпозиум",
     "конгресс",
     "кругл",
+)
+_PAST_MARKERS = (
+    "прошел",
+    "прошла",
+    "прошли",
+    "прошедш",
+    "состоялся",
+    "состоялась",
+    "состоялось",
+    "состоялись",
+    "итоги",
 )
 
 _MONTHS_RU = {
@@ -57,6 +69,7 @@ class EventCard:
     text: str
     url: str
     is_past: bool
+    image_urls: list[str]
 
 
 def _is_event_text(text: str) -> bool:
@@ -66,6 +79,13 @@ def _is_event_text(text: str) -> bool:
     if "📅" in text:
         return True
     return any(key in lowered for key in _EVENT_KEYWORDS)
+
+
+def _looks_past(text: str) -> bool:
+    if not text:
+        return False
+    lowered = text.lower()
+    return any(marker in lowered for marker in _PAST_MARKERS)
 
 
 def _parse_event_date_range(text: str) -> Optional[tuple[date, date]]:
@@ -91,6 +111,21 @@ def _parse_event_date_range(text: str) -> Optional[tuple[date, date]]:
     return start, end
 
 
+def _render_plain_text(element) -> str:
+    def _render_node(node) -> str:
+        if isinstance(node, NavigableString):
+            return unescape(str(node))
+        name = getattr(node, "name", None)
+        if name == "br":
+            return "\n"
+        if not name:
+            return ""
+        return "".join(_render_node(child) for child in node.children)
+
+    text = "".join(_render_node(child) for child in element.children)
+    return text.replace("\r", "").strip()
+
+
 async def _fetch_channel_html(channel: str) -> str:
     url = f"https://t.me/s/{channel}"
     headers = {"User-Agent": "Mozilla/5.0"}
@@ -110,12 +145,22 @@ def _extract_posts(html_text: str) -> list[dict[str, object]]:
         text = ""
         links: list[str] = []
         if text_el:
-            text = text_el.get_text("\n").strip()
+            text = _render_plain_text(text_el)
             links = [
                 a.get("href", "").strip()
                 for a in text_el.find_all("a")
                 if a.get("href")
             ]
+        image_urls: list[str] = []
+        for photo_el in msg.select(".tgme_widget_message_photo_wrap"):
+            if not photo_el or not photo_el.has_attr("style"):
+                continue
+            style = photo_el.get("style", "")
+            match = re.search(r"url\(['\"]?(.*?)['\"]?\)", style)
+            if match:
+                url = match.group(1).strip()
+                if url:
+                    image_urls.append(url)
         time_el = msg.select_one("time")
         published_at: Optional[datetime] = None
         if time_el and time_el.has_attr("datetime"):
@@ -126,15 +171,18 @@ def _extract_posts(html_text: str) -> list[dict[str, object]]:
         posts.append(
             {
                 "post_id": post_id,
-                "text": unescape(text),
+                "text": text,
                 "links": links,
+                "image_urls": image_urls,
                 "published_at": published_at,
             }
         )
     return posts
 
 
-def _pick_event_candidate(posts: list[dict[str, object]]) -> Optional[dict[str, object]]:
+def _pick_event_candidate(
+    posts: list[dict[str, object]],
+) -> Optional[dict[str, object]]:
     if not posts:
         return None
     now = datetime.now(_MSK_TZ).date()
@@ -142,26 +190,60 @@ def _pick_event_candidate(posts: list[dict[str, object]]) -> Optional[dict[str, 
     if not candidates:
         return None
     upcoming: list[tuple[date, dict[str, object]]] = []
+    dated: list[tuple[date, dict[str, object]]] = []
     for post in candidates:
-        date_range = _parse_event_date_range(str(post.get("text", "")))
+        text = str(post.get("text", ""))
+        date_range = _parse_event_date_range(text)
         if not date_range:
             continue
         _start, end = date_range
-        if end >= now:
+        dated.append((end, post))
+        if end >= now and not _looks_past(text):
             upcoming.append((end, post))
     if upcoming:
         upcoming.sort(key=lambda item: item[0])
         return upcoming[0][1]
-    candidates.sort(
-        key=lambda item: item.get("published_at") or datetime.min,
-        reverse=True,
-    )
-    return candidates[0]
+    if dated:
+        dated.sort(key=lambda item: item[0], reverse=True)
+        return dated[0][1]
+    return None
 
 
 def _build_event_card(
     *, channel: str, post: dict[str, object]
 ) -> Optional[EventCard]:
+    def _normalize_url(raw: str) -> str:
+        value = (raw or "").strip()
+        if not value:
+            return ""
+        if value.startswith("tg://"):
+            return value
+        if not value.startswith(("http://", "https://")):
+            return ""
+        parsed = urlparse(value)
+        if not parsed.scheme or not parsed.netloc:
+            return ""
+        host = parsed.hostname or ""
+        if not host:
+            return ""
+        try:
+            host = unquote(host).encode("idna").decode("ascii")
+        except Exception:
+            pass
+        netloc = host
+        if parsed.port:
+            netloc = f"{host}:{parsed.port}"
+        return urlunparse(
+            (
+                parsed.scheme,
+                netloc,
+                parsed.path or "",
+                parsed.params or "",
+                parsed.query or "",
+                parsed.fragment or "",
+            )
+        )
+
     post_id = str(post.get("post_id", "")).strip()
     text = str(post.get("text", "")).strip()
     if not text:
@@ -173,22 +255,44 @@ def _build_event_card(
     if date_range:
         _start, end = date_range
         is_past = end < now
+    if not is_past and _looks_past(text):
+        is_past = True
     url = ""
-    links = [str(l).strip() for l in post.get("links", []) if str(l).strip()]
-    if links:
-        url = links[0]
+    raw_links = post.get("links")
+    if not isinstance(raw_links, list):
+        raw_links = []
+    links = [str(link).strip() for link in raw_links if str(link).strip()]
+    for link in links:
+        normalized = _normalize_url(link)
+        if normalized:
+            url = normalized
+            break
     if not url:
-        url = post_url
+        url = _normalize_url(post_url) or post_url
+
+    def _clip_text(value: str, max_len: int) -> str:
+        if len(value) <= max_len:
+            return value
+        clipped = value[:max_len]
+        if "\n" in clipped:
+            clipped = clipped.rsplit("\n", 1)[0]
+        if len(clipped) < max_len * 0.5:
+            clipped = value[:max_len]
+        return clipped.rstrip() + "..."
+
     lines: list[str] = []
-    if is_past:
-        lines.append(
-            "⚠️ Мероприятие уже прошло. Мы обновим карточку, как появится следующее."
-        )
-    lines.append("Ближайшее мероприятие СРВТ:")
-    lines.append(text)
-    if url and url not in text:
-        lines.append(f"Подробнее и регистрация: {url}")
-    return EventCard(text="\n\n".join(lines), url=url, is_past=is_past)
+    lines.append(_clip_text(text, _MAX_EVENT_TEXT_LEN))
+    raw_images = post.get("image_urls")
+    if not isinstance(raw_images, list):
+        raw_images = []
+    image_urls = [_normalize_url(str(item)) for item in raw_images]
+    image_urls = [item for item in image_urls if item]
+    return EventCard(
+        text="\n\n".join(lines),
+        url=url,
+        is_past=is_past,
+        image_urls=image_urls,
+    )
 
 
 async def get_latest_event_card(

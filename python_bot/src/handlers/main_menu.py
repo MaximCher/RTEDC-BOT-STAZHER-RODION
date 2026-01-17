@@ -15,10 +15,13 @@ from aiogram.types import (
     FSInputFile,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
+    InputMediaPhoto,
     Message,
+    URLInputFile,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.config import settings
+from src.logger import logger
 from src.menu.content import (
     CLUB_JOIN_INTRO,
     EVENT_INFO,
@@ -45,12 +48,65 @@ from src.services.currency_rates_service import (
 from src.services.events_service import get_latest_event_card
 from src.services.staff_service import is_staff
 from src.utils.access_gate import gate_keyboard, gate_text
+from src.utils.event_media_cache import set_event_media
 from src.utils.funnel import log_event
 from src.utils.keyboards import lead_services_keyboard
 from src.utils.messages import msg
 from src.utils.ui_flow import ui_upsert
 
 router = Router()
+
+_EVENT_CHANNEL = "@rtedc_org"
+_EVENT_CHANNEL_URL = "https://t.me/rtedc_org"
+
+
+async def _ensure_event_subscription(callback: CallbackQuery) -> bool:
+    try:
+        cm = await callback.message.bot.get_chat_member(
+            _EVENT_CHANNEL, callback.from_user.id
+        )
+        status = getattr(cm, "status", None)
+        if status not in {"left", "kicked"}:
+            return True
+    except Exception:
+        pass
+    rows = [
+        [
+            InlineKeyboardButton(
+                text="🔗 Подписаться на @rtedc_org",
+                url=_EVENT_CHANNEL_URL,
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="✅ Проверить подписку",
+                callback_data="events:check",
+            )
+        ],
+    ]
+    bot_username = settings.telegram_bot_username.strip().lstrip("@")
+    if bot_username:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="↩️ Вернуться в бот",
+                    url=f"https://t.me/{bot_username}?start=events",
+                )
+            ]
+        )
+    rows.append(
+        [InlineKeyboardButton(text="В главное меню", callback_data="menu:new")]
+    )
+    kb = InlineKeyboardMarkup(inline_keyboard=rows)
+    await callback.message.answer(
+        "Чтобы посмотреть мероприятия, подпишитесь на @rtedc_org.",
+        reply_markup=kb,
+    )
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+    return False
 
 
 def _chat_ref_for_api(chat_ref: str) -> str | int:
@@ -72,6 +128,19 @@ async def _check_gate(
     except Exception:
         pass
     req = await RequiredSubscription.list_all(session)
+    if not any(
+        (it.chat_ref or "").strip().lstrip("@").lower()
+        == _EVENT_CHANNEL.lstrip("@").lower()
+        for it in req
+    ):
+        req.append(
+            RequiredSubscription(
+                kind="channel",
+                chat_ref=_EVENT_CHANNEL,
+                title="@rtedc_org",
+                url=_EVENT_CHANNEL_URL,
+            )
+        )
     if not req:
         return True, []
     missing: list[RequiredSubscription] = []
@@ -355,9 +424,7 @@ async def menu_apply_description(
 
 
 @router.callback_query(F.data == "srvtevents")
-async def menu_events(
-    callback: CallbackQuery, session: AsyncSession
-) -> None:
+async def menu_events(callback: CallbackQuery, session: AsyncSession) -> None:
     allowed, missing = await _check_gate(
         bot=callback.message.bot,
         session=session,
@@ -372,29 +439,36 @@ async def menu_events(
         except Exception:
             pass
         return
-    # Answer early to avoid endless loading if remote fetch stalls.
+    if not await _ensure_event_subscription(callback):
+        return
+    # Stop spinner without showing a popup.
     try:
-        await callback.answer("Загружаю карточку…")
+        await callback.answer()
     except Exception:
         pass
-    await log_event(
-        session,
-        user_id=callback.from_user.id,
-        chat_id=callback.message.chat.id,
-        username=callback.from_user.username,
-        event="event_view",
-        meta={"label": "Просмотр информации о мероприятии"},
-    )
+    try:
+        await log_event(
+            session,
+            user_id=callback.from_user.id,
+            chat_id=callback.message.chat.id,
+            username=callback.from_user.username,
+            event="event_view",
+            meta={"label": "Просмотр информации о мероприятии"},
+        )
+    except Exception:
+        pass
     card = None
     try:
         card = await asyncio.wait_for(get_latest_event_card(), timeout=6.0)
     except Exception:
         card = None
     event_text = EVENT_INFO
-    event_url = "https://t.me/rtedc_org"
+    event_url = _EVENT_CHANNEL_URL
+    image_urls: list[str] = []
     if card:
         event_text = card.text
         event_url = card.url or event_url
+        image_urls = list(card.image_urls or [])
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -407,10 +481,74 @@ async def menu_events(
             ],
         ]
     )
+    message = callback.message
+    chat_id = message.chat.id if message else callback.from_user.id
     try:
-        await callback.message.edit_text(event_text, reply_markup=kb)
-    except Exception:
-        await callback.message.answer(event_text, reply_markup=kb)
+        if card and card.is_past:
+            await callback.message.answer(
+                "⚠️ Мероприятие уже прошло. Мы обновим карточку, как появится следующее."
+            )
+        if image_urls:
+            try:
+                media: list[InputMediaPhoto] = []
+                for url in image_urls:
+                    media.append(InputMediaPhoto(media=URLInputFile(url)))
+                if len(media) == 1:
+                    msg = await callback.message.answer_photo(media[0].media)
+                    set_event_media(
+                        user_id=callback.from_user.id,
+                        chat_id=chat_id,
+                        message_ids=[msg.message_id],
+                    )
+                else:
+                    messages = await callback.bot.send_media_group(
+                        chat_id=chat_id, media=media
+                    )
+                    set_event_media(
+                        user_id=callback.from_user.id,
+                        chat_id=chat_id,
+                        message_ids=[m.message_id for m in messages],
+                    )
+                await callback.message.answer(event_text, reply_markup=kb)
+                return
+            except Exception as exc:
+                logger.warning(
+                    "event_photo_send_failed",
+                    error=str(exc),
+                    image_urls=image_urls,
+                )
+        if message:
+            await message.edit_text(event_text, reply_markup=kb)
+        else:
+            await callback.bot.send_message(
+                chat_id=chat_id, text=event_text, reply_markup=kb
+            )
+    except Exception as exc:
+        logger.warning(
+            "event_card_send_failed", error=str(exc), text_len=len(event_text)
+        )
+        short_text = event_text
+        if len(short_text) > 3500:
+            short_text = short_text[:3500].rstrip() + "..."
+        try:
+            await callback.bot.send_message(
+                chat_id=chat_id, text=short_text, reply_markup=kb
+            )
+        except Exception as exc2:
+            logger.warning(
+                "event_card_send_failed_fallback",
+                error=str(exc2),
+                text_len=len(short_text),
+            )
+
+
+@router.callback_query(F.data == "events:check")
+async def menu_events_check(
+    callback: CallbackQuery, session: AsyncSession
+) -> None:
+    if not await _ensure_event_subscription(callback):
+        return
+    await menu_events(callback, session)
 
 
 @router.callback_query(F.data == "currency_rates")
@@ -744,9 +882,7 @@ async def menu_join_club_expectations(
     await message.answer(
         "Ваша заявка принята и менеджер свяжется с вами по итогам рассмотрения или добавит в группу Клуба!"
     )
-    await message.answer(
-        MENU_TEXT, reply_markup=main_menu_keyboard()
-    )
+    await message.answer(MENU_TEXT, reply_markup=main_menu_keyboard())
     await state.clear()
 
 

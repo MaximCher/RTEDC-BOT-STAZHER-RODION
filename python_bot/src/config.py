@@ -172,9 +172,9 @@ class Settings(BaseSettings):
         if raw:
             # Accept common sync DSN formats and convert to async dialect.
             if raw.startswith("postgresql://"):
-                return "postgresql+asyncpg://" + raw[len("postgresql://"):]
+                return "postgresql+asyncpg://" + raw[len("postgresql://") :]
             if raw.startswith("postgres://"):
-                return "postgresql+asyncpg://" + raw[len("postgres://"):]
+                return "postgresql+asyncpg://" + raw[len("postgres://") :]
             return raw
 
         user = self.postgres_user

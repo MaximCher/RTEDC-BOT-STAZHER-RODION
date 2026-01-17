@@ -35,6 +35,7 @@ from src.services.currency_rates_service import (
 )
 from src.services.staff_service import is_admin, is_staff, touch_staff_profile
 from src.utils.access_gate import gate_keyboard, gate_text
+from src.utils.event_media_cache import pop_event_media
 from src.utils.funnel import log_event
 from src.utils.keyboards import services_keyboard
 from src.utils.messages import msg
@@ -42,6 +43,9 @@ from src.utils.service_entry import entry_screen_for_service
 from src.utils.webapp_url import get_webapp_public_url
 
 router = Router()
+
+_EVENT_CHANNEL = "@rtedc_org"
+_EVENT_CHANNEL_URL = "https://t.me/rtedc_org"
 
 
 class ContactRequest(StatesGroup):
@@ -59,7 +63,21 @@ async def _ask_contact_enabled(session: AsyncSession) -> bool:
 async def _required_subscriptions(
     session: AsyncSession,
 ) -> list[RequiredSubscription]:
-    return await RequiredSubscription.list_all(session)
+    req = await RequiredSubscription.list_all(session)
+    if not any(
+        (it.chat_ref or "").strip().lstrip("@").lower()
+        == _EVENT_CHANNEL.lstrip("@").lower()
+        for it in req
+    ):
+        req.append(
+            RequiredSubscription(
+                kind="channel",
+                chat_ref=_EVENT_CHANNEL,
+                title="@rtedc_org",
+                url=_EVENT_CHANNEL_URL,
+            )
+        )
+    return req
 
 
 def _chat_ref_for_api(chat_ref: str) -> str | int:
@@ -182,7 +200,9 @@ async def _open_menu_from_callback(
         user_id=callback.from_user.id,
     )
     if not allowed:
-        await message.answer(gate_text(missing), reply_markup=gate_keyboard(missing))
+        await message.answer(
+            gate_text(missing), reply_markup=gate_keyboard(missing)
+        )
         try:
             await callback.answer()
         except Exception:
@@ -201,7 +221,9 @@ async def _open_menu_from_callback(
         await message.edit_text(text, reply_markup=main_menu_keyboard())
     except Exception:
         try:
-            sent = await message.answer(text, reply_markup=main_menu_keyboard())
+            sent = await message.answer(
+                text, reply_markup=main_menu_keyboard()
+            )
             try:
                 await message.delete()
             except Exception:
@@ -493,6 +515,14 @@ async def back_to_menu(
 ) -> None:
     # UX: keep Telegram "loading" animation on the pressed button.
     # We'll answer the callback after UI is rendered.
+    media = pop_event_media(user_id=callback.from_user.id)
+    if media:
+        chat_id, message_ids = media
+        for message_id in message_ids:
+            try:
+                await callback.bot.delete_message(chat_id, message_id)
+            except Exception:
+                pass
     await _open_menu_from_callback(
         callback=callback,
         state=state,
@@ -506,6 +536,14 @@ async def open_menu_new_message(
     callback: CallbackQuery, state: FSMContext, session: AsyncSession
 ) -> None:
     """Open menu, предпочитая редактирование сообщения, чтобы не плодить новые."""
+    media = pop_event_media(user_id=callback.from_user.id)
+    if media:
+        chat_id, message_ids = media
+        for message_id in message_ids:
+            try:
+                await callback.bot.delete_message(chat_id, message_id)
+            except Exception:
+                pass
     await _open_menu_from_callback(
         callback=callback,
         state=state,

@@ -32,8 +32,7 @@ def gate_text(missing: List[RequiredSubscription]) -> str:
     ]
     for it in missing:
         label = (it.title or it.chat_ref).strip()
-        kind = (it.kind or "other").strip()
-        lines.append(f"- {label} ({kind})")
+        lines.append(f"- {label}")
     lines.append("")
     lines.append("После подписки нажмите «✅ Проверить доступ».")
     return "\n".join(lines).strip()

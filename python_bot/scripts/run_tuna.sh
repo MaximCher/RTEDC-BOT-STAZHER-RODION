@@ -5,6 +5,7 @@ set -euo pipefail
 TUNA_BIN="${TUNA_BIN:-/usr/bin/tuna}"
 PORT="${TUNA_HTTP_PORT:-80}"
 OUT_FILE="${TUNA_URL_FILE:-/opt/srvt-bot/python_bot/.tuna_url}"
+TUNA_API_KEY="${TUNA_API_KEY:-}"
 
 if [ -z "${TUNA_TOKEN:-}" ]; then
   echo "TUNA_TOKEN is empty. Set it in /opt/srvt-bot/python_bot/.env (or via GitHub Secret TUNA_TOKEN) and restart srvt-tuna.service."
@@ -13,6 +14,11 @@ fi
 
 # Persist token in tuna config (idempotent). We intentionally do not print the token.
 ${TUNA_BIN} config save-token "${TUNA_TOKEN}" >/dev/null 2>&1 || true
+
+# Proactively clear stale tunnels if we have an API key to avoid "tunnel limit reached".
+if [ -n "${TUNA_API_KEY}" ]; then
+  ${TUNA_BIN} tunnel clear --api-key "${TUNA_API_KEY}" >/dev/null 2>&1 || true
+fi
 
 # Optional: attempt to keep a stable URL across restarts.
 # If TUNA_SUBDOMAIN is set and allowed, tuna will try to use it.
